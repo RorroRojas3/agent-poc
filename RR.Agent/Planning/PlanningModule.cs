@@ -1,11 +1,13 @@
 namespace RR.Agent.Planning;
 
+using System.Text;
 using System.Text.Json;
 using Azure.AI.Agents.Persistent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RR.Agent.Configuration;
 using RR.Agent.Exceptions;
+using RR.Agent.Execution.Models;
 using RR.Agent.Infrastructure;
 using RR.Agent.Planning.Models;
 using RR.Agent.Tools;
@@ -80,6 +82,7 @@ public sealed class PlanningModule : IPlanningModule
 
     public async Task<ExecutionPlan> CreatePlanAsync(
         string userRequest,
+        IReadOnlyList<InputFile>? inputFiles = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userRequest);
@@ -95,11 +98,14 @@ public sealed class PlanningModule : IPlanningModule
             var threadResponse = await _client.Threads.CreateThreadAsync();
             var thread = threadResponse.Value;
 
+            // Build the planning request with file context
+            var messageContent = BuildPlanningMessage(userRequest, inputFiles);
+
             // Send the user request
             await _client.Messages.CreateMessageAsync(
                 threadId: thread.Id,
                 role: MessageRole.User,
-                content: $"Create an execution plan for the following request:\n\n{userRequest}");
+                content: messageContent);
 
             // Run the planning agent
             var runResponse = await _client.Runs.CreateRunAsync(
@@ -209,7 +215,29 @@ public sealed class PlanningModule : IPlanningModule
             Please create a refined plan that addresses the feedback while accomplishing the original goal.
             """;
 
-        return await CreatePlanAsync(refinementRequest, cancellationToken);
+        return await CreatePlanAsync(refinementRequest, null, cancellationToken);
+    }
+
+    private static string BuildPlanningMessage(string userRequest, IReadOnlyList<InputFile>? inputFiles)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Create an execution plan for the following request:");
+        sb.AppendLine();
+        sb.AppendLine(userRequest);
+
+        if (inputFiles is { Count: > 0 })
+        {
+            sb.AppendLine();
+            sb.AppendLine("The following input files are available for use in the plan:");
+            foreach (var file in inputFiles)
+            {
+                sb.AppendLine($"- {file.FileName} (original path: {file.OriginalPath})");
+            }
+            sb.AppendLine();
+            sb.AppendLine("Scripts can read, modify, or process these files. Reference them by filename in your step descriptions.");
+        }
+
+        return sb.ToString();
     }
 
     private async Task EnsurePlanningAgentExistsAsync(CancellationToken cancellationToken)

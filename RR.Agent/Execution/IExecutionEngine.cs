@@ -13,12 +13,14 @@ public interface IExecutionEngine
     /// </summary>
     /// <param name="step">The step to execute.</param>
     /// <param name="context">Context from previous step executions.</param>
+    /// <param name="inputFiles">Input files available for script execution.</param>
     /// <param name="retryContext">Optional context for retry attempts.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The execution result.</returns>
     Task<ExecutionResult> ExecuteStepAsync(
         PlanStep step,
         IReadOnlyDictionary<int, ExecutionResult> context,
+        IReadOnlyList<InputFile>? inputFiles = null,
         string? retryContext = null,
         CancellationToken cancellationToken = default);
 

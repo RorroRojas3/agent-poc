@@ -22,6 +22,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
     private readonly IExecutionEngine _executionEngine;
     private readonly IEvaluationModule _evaluationModule;
     private readonly IRetryStrategy _retryStrategy;
+    private readonly IFileManager _fileManager;
     private readonly AgentOptions _options;
     private readonly ILogger<AgentOrchestrator> _logger;
 
@@ -30,6 +31,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         IExecutionEngine executionEngine,
         IEvaluationModule evaluationModule,
         IRetryStrategy retryStrategy,
+        IFileManager fileManager,
         IOptions<AgentOptions> options,
         ILogger<AgentOrchestrator> logger)
     {
@@ -37,6 +39,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         ArgumentNullException.ThrowIfNull(executionEngine);
         ArgumentNullException.ThrowIfNull(evaluationModule);
         ArgumentNullException.ThrowIfNull(retryStrategy);
+        ArgumentNullException.ThrowIfNull(fileManager);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -44,19 +47,22 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         _executionEngine = executionEngine;
         _evaluationModule = evaluationModule;
         _retryStrategy = retryStrategy;
+        _fileManager = fileManager;
         _options = options.Value;
         _logger = logger;
     }
 
     public async Task<OrchestratorResult> ProcessRequestAsync(
         string userRequest,
+        IEnumerable<string>? inputFilePaths = null,
         CancellationToken cancellationToken = default)
     {
-        return await ExecuteFullPipelineAsync(userRequest, cancellationToken);
+        return await ExecuteFullPipelineAsync(userRequest, inputFilePaths, cancellationToken);
     }
 
     public async IAsyncEnumerable<OrchestratorUpdate> ProcessRequestStreamingAsync(
         string userRequest,
+        IEnumerable<string>? inputFilePaths = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userRequest);
@@ -64,6 +70,33 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         _logger.LogInformation("Starting orchestration for request: {Request}", userRequest);
 
         var stepResults = new Dictionary<int, ExecutionResult>();
+        IReadOnlyList<InputFile> inputFiles = [];
+
+        // Phase 0: Prepare input files (if any)
+        var filePaths = inputFilePaths?.ToList() ?? [];
+        if (filePaths.Count > 0)
+        {
+            yield return new OrchestratorUpdate(
+                OrchestratorPhase.PreparingFiles,
+                $"Preparing {filePaths.Count} input file(s)...");
+
+            var (preparedFiles, fileError) = await PrepareFilesSafelyAsync(filePaths, cancellationToken);
+
+            if (fileError is not null)
+            {
+                _logger.LogError(fileError, "File preparation failed");
+                yield return new OrchestratorUpdate(
+                    OrchestratorPhase.Failed,
+                    $"File preparation failed: {fileError.Message}");
+                yield break;
+            }
+
+            inputFiles = preparedFiles ?? [];
+
+            yield return new OrchestratorUpdate(
+                OrchestratorPhase.PreparingFiles,
+                $"Prepared {inputFiles.Count} file(s): {string.Join(", ", inputFiles.Select(f => f.FileName))}");
+        }
 
         // Phase 1: Planning
         yield return new OrchestratorUpdate(
@@ -71,7 +104,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
             "Analyzing request and creating execution plan...");
 
         // Create plan (handle exceptions outside the try-catch to enable yielding)
-        var (plan, planError) = await CreatePlanSafelyAsync(userRequest, cancellationToken);
+        var (plan, planError) = await CreatePlanSafelyAsync(userRequest, inputFiles, cancellationToken);
 
         if (planError is not null)
         {
@@ -119,6 +152,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
                 result = await _executionEngine.ExecuteStepAsync(
                     step,
                     stepResults,
+                    inputFiles,
                     retryHint,
                     cancellationToken);
 
@@ -185,13 +219,29 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         _logger.LogInformation("Orchestration completed successfully");
     }
 
-    private async Task<(ExecutionPlan? Plan, Exception? Error)> CreatePlanSafelyAsync(
-        string userRequest,
+    private async Task<(IReadOnlyList<InputFile>? Files, Exception? Error)> PrepareFilesSafelyAsync(
+        IEnumerable<string> filePaths,
         CancellationToken cancellationToken)
     {
         try
         {
-            var plan = await _planningModule.CreatePlanAsync(userRequest, cancellationToken);
+            var files = await _fileManager.PrepareInputFilesAsync(filePaths, cancellationToken);
+            return (files, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex);
+        }
+    }
+
+    private async Task<(ExecutionPlan? Plan, Exception? Error)> CreatePlanSafelyAsync(
+        string userRequest,
+        IReadOnlyList<InputFile> inputFiles,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var plan = await _planningModule.CreatePlanAsync(userRequest, inputFiles, cancellationToken);
             return (plan, null);
         }
         catch (Exception ex)
@@ -202,14 +252,23 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
 
     private async Task<OrchestratorResult> ExecuteFullPipelineAsync(
         string userRequest,
+        IEnumerable<string>? inputFilePaths,
         CancellationToken cancellationToken)
     {
         var stepResults = new Dictionary<int, ExecutionResult>();
         ExecutionPlan plan;
+        IReadOnlyList<InputFile> inputFiles = [];
+
+        // Prepare input files if any
+        var filePaths = inputFilePaths?.ToList() ?? [];
+        if (filePaths.Count > 0)
+        {
+            inputFiles = await _fileManager.PrepareInputFilesAsync(filePaths, cancellationToken);
+        }
 
         try
         {
-            plan = await _planningModule.CreatePlanAsync(userRequest, cancellationToken);
+            plan = await _planningModule.CreatePlanAsync(userRequest, inputFiles, cancellationToken);
 
             if (!_planningModule.ValidatePlan(plan))
             {
@@ -240,6 +299,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
                 result = await _executionEngine.ExecuteStepAsync(
                     step,
                     stepResults,
+                    inputFiles,
                     retryHint,
                     cancellationToken);
 

@@ -37,6 +37,9 @@ async Task RunInteractiveAgentAsync(IServiceProvider services)
     Console.WriteLine("║  2. Execute each step via code interpreter                 ║");
     Console.WriteLine("║  3. Evaluate results and retry on failure (max 3 attempts) ║");
     Console.WriteLine("║                                                            ║");
+    Console.WriteLine("║  Use --file <path> to provide input files                  ║");
+    Console.WriteLine("║  Example: --file data.csv Analyze this file                ║");
+    Console.WriteLine("║                                                            ║");
     Console.WriteLine("║  Type 'exit' or 'quit' to exit                             ║");
     Console.WriteLine("║  Press Ctrl+C to cancel current operation                  ║");
     Console.WriteLine("╚════════════════════════════════════════════════════════════╝");
@@ -79,7 +82,19 @@ async Task RunInteractiveAgentAsync(IServiceProvider services)
         try
         {
             Console.WriteLine();
-            await ProcessRequestWithUpdatesAsync(orchestrator, input, cts.Token);
+
+            // Parse input for --file flags
+            var (request, filePaths) = ParseInputWithFiles(input);
+
+            if (string.IsNullOrWhiteSpace(request))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("Please provide a task request along with the files.");
+                Console.ResetColor();
+                continue;
+            }
+
+            await ProcessRequestWithUpdatesAsync(orchestrator, request, filePaths, cts.Token);
             Console.WriteLine();
         }
         catch (OperationCanceledException)
@@ -98,15 +113,49 @@ async Task RunInteractiveAgentAsync(IServiceProvider services)
     }
 }
 
+(string Request, List<string> FilePaths) ParseInputWithFiles(string input)
+{
+    var filePaths = new List<string>();
+    var parts = new List<string>();
+    var tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    for (int i = 0; i < tokens.Length; i++)
+    {
+        if (tokens[i].Equals("--file", StringComparison.OrdinalIgnoreCase) && i + 1 < tokens.Length)
+        {
+            var filePath = tokens[i + 1];
+            if (File.Exists(filePath))
+            {
+                filePaths.Add(filePath);
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Warning: File not found: {filePath}");
+                Console.ResetColor();
+            }
+            i++; // Skip the file path token
+        }
+        else
+        {
+            parts.Add(tokens[i]);
+        }
+    }
+
+    return (string.Join(" ", parts), filePaths);
+}
+
 async Task ProcessRequestWithUpdatesAsync(
     IAgentOrchestrator orchestrator,
     string request,
+    List<string> filePaths,
     CancellationToken cancellationToken)
 {
-    await foreach (var update in orchestrator.ProcessRequestStreamingAsync(request, cancellationToken))
+    await foreach (var update in orchestrator.ProcessRequestStreamingAsync(request, filePaths, cancellationToken))
     {
         var (color, prefix) = update.Phase switch
         {
+            OrchestratorPhase.PreparingFiles => (ConsoleColor.DarkCyan, "📁 FILES"),
             OrchestratorPhase.Planning => (ConsoleColor.Blue, "📋 PLANNING"),
             OrchestratorPhase.PlanPresentation => (ConsoleColor.Magenta, "📝 PLAN"),
             OrchestratorPhase.Executing => (ConsoleColor.Yellow, "⚙️  EXECUTING"),

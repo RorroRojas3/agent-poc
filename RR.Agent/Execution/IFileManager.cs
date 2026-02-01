@@ -8,6 +8,26 @@ using RR.Agent.Execution.Models;
 public interface IFileManager
 {
     /// <summary>
+    /// Prepares an input file by copying it to the workspace and uploading to Azure.
+    /// </summary>
+    /// <param name="filePath">Path to the user's input file.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The prepared input file with workspace path and agent file ID.</returns>
+    Task<InputFile> PrepareInputFileAsync(
+        string filePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Prepares multiple input files by copying them to the workspace and uploading to Azure.
+    /// </summary>
+    /// <param name="filePaths">Paths to the user's input files.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The prepared input files with workspace paths and agent file IDs.</returns>
+    Task<IReadOnlyList<InputFile>> PrepareInputFilesAsync(
+        IEnumerable<string> filePaths,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Saves a script to the local workspace.
     /// </summary>
     /// <param name="script">Script information to save.</param>

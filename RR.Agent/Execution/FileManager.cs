@@ -31,6 +31,70 @@ public sealed class FileManager : IFileManager
         _workspacePath = Path.GetFullPath(_options.WorkspaceDirectory);
     }
 
+    public async Task<InputFile> PrepareInputFileAsync(
+        string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Input file not found: {filePath}", filePath);
+        }
+
+        await EnsureWorkspaceExistsAsync(cancellationToken);
+
+        var fileName = Path.GetFileName(filePath);
+        var inputFile = new InputFile(filePath, fileName);
+
+        // Copy file to workspace
+        var workspacePath = Path.Combine(_workspacePath, fileName);
+
+        // Ensure unique filename if file exists
+        var counter = 1;
+        while (File.Exists(workspacePath))
+        {
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+            var extension = Path.GetExtension(fileName);
+            workspacePath = Path.Combine(_workspacePath, $"{nameWithoutExt}_{counter}{extension}");
+            counter++;
+        }
+
+        await Task.Run(() => File.Copy(filePath, workspacePath), cancellationToken);
+        inputFile = inputFile.WithWorkspacePath(workspacePath);
+
+        _logger.LogDebug("Copied input file {OriginalPath} to {WorkspacePath}", filePath, workspacePath);
+
+        // Upload to Azure AI Agent storage
+        var fileId = await UploadFileAsync(workspacePath, cancellationToken);
+        inputFile = inputFile.WithAgentFileId(fileId);
+
+        _logger.LogInformation(
+            "Prepared input file {FileName} with ID {FileId}",
+            fileName,
+            fileId);
+
+        return inputFile;
+    }
+
+    public async Task<IReadOnlyList<InputFile>> PrepareInputFilesAsync(
+        IEnumerable<string> filePaths,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePaths);
+
+        var inputFiles = new List<InputFile>();
+
+        foreach (var filePath in filePaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var inputFile = await PrepareInputFileAsync(filePath, cancellationToken);
+            inputFiles.Add(inputFile);
+        }
+
+        return inputFiles;
+    }
+
     public async Task<ScriptInfo> SaveScriptLocallyAsync(
         ScriptInfo script,
         CancellationToken cancellationToken = default)

@@ -1,5 +1,6 @@
 namespace RR.Agent.Planning;
 
+using RR.Agent.Execution.Models;
 using RR.Agent.Planning.Models;
 
 /// <summary>
@@ -11,10 +12,12 @@ public interface IPlanningModule
     /// Analyzes a user request and creates a structured execution plan.
     /// </summary>
     /// <param name="userRequest">The user's natural language request.</param>
+    /// <param name="inputFiles">Optional input files available for the plan to use.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>An execution plan with ordered steps.</returns>
     Task<ExecutionPlan> CreatePlanAsync(
         string userRequest,
+        IReadOnlyList<InputFile>? inputFiles = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

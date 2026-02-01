@@ -70,6 +70,7 @@ public sealed class ExecutionEngine : IExecutionEngine
     public async Task<ExecutionResult> ExecuteStepAsync(
         PlanStep step,
         IReadOnlyDictionary<int, ExecutionResult> context,
+        IReadOnlyList<InputFile>? inputFiles = null,
         string? retryContext = null,
         CancellationToken cancellationToken = default)
     {
@@ -91,8 +92,8 @@ public sealed class ExecutionEngine : IExecutionEngine
                 return await ExecuteNonCodeStepAsync(step, context, stopwatch, cancellationToken);
             }
 
-            // Generate the script
-            var script = await _scriptGenerator.GenerateScriptAsync(step, context, cancellationToken);
+            // Generate the script with input file context
+            var script = await _scriptGenerator.GenerateScriptAsync(step, context, inputFiles, cancellationToken);
 
             // Save script locally for debugging
             script = await _fileManager.SaveScriptLocallyAsync(script, cancellationToken);
@@ -102,7 +103,7 @@ public sealed class ExecutionEngine : IExecutionEngine
             script = script.WithAgentFileId(fileId);
 
             // Execute the script via code interpreter
-            var result = await ExecuteScriptAsync(step, script, retryContext, stopwatch, cancellationToken);
+            var result = await ExecuteScriptAsync(step, script, inputFiles, retryContext, stopwatch, cancellationToken);
 
             return result;
         }
@@ -152,6 +153,7 @@ public sealed class ExecutionEngine : IExecutionEngine
     private async Task<ExecutionResult> ExecuteScriptAsync(
         PlanStep step,
         ScriptInfo script,
+        IReadOnlyList<InputFile>? inputFiles,
         string? retryContext,
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
@@ -162,21 +164,29 @@ public sealed class ExecutionEngine : IExecutionEngine
         var threadResponse = await _client.Threads.CreateThreadAsync();
         var thread = threadResponse.Value;
 
-        // Create message with script attachment
+        // Create message with script attachment and input file attachments
         var tools = _toolProvider.GetToolDefinitions().ToList();
-        var attachment = new MessageAttachment(script.AgentFileId!, tools);
-
-        var messageContent = $"Execute the attached {script.Language} script and report the results.";
-        if (!string.IsNullOrWhiteSpace(retryContext))
+        var attachments = new List<MessageAttachment>
         {
-            messageContent += $"\n\nPrevious attempt context: {retryContext}";
+            new(script.AgentFileId!, tools)
+        };
+
+        // Add input files as attachments
+        if (inputFiles is { Count: > 0 })
+        {
+            foreach (var inputFile in inputFiles.Where(f => f.IsUploaded))
+            {
+                attachments.Add(new MessageAttachment(inputFile.AgentFileId!, tools));
+            }
         }
+
+        var messageContent = BuildExecutionMessage(script, inputFiles, retryContext);
 
         await _client.Messages.CreateMessageAsync(
             threadId: thread.Id,
             role: MessageRole.User,
             content: messageContent,
-            attachments: [attachment]);
+            attachments: attachments);
 
         // Run the execution agent
         var runResponse = await _client.Runs.CreateRunAsync(
@@ -309,6 +319,33 @@ public sealed class ExecutionEngine : IExecutionEngine
 
         return string.Join("\n", context.Select(kvp =>
             $"Step {kvp.Key}: {(kvp.Value.IsSuccess ? "Success" : "Failed")} - {kvp.Value.Output ?? "No output"}"));
+    }
+
+    private static string BuildExecutionMessage(
+        ScriptInfo script,
+        IReadOnlyList<InputFile>? inputFiles,
+        string? retryContext)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Execute the attached {script.Language} script and report the results.");
+
+        if (inputFiles is { Count: > 0 })
+        {
+            sb.AppendLine();
+            sb.AppendLine("The following input files are also attached and available for the script to use:");
+            foreach (var file in inputFiles.Where(f => f.IsUploaded))
+            {
+                sb.AppendLine($"- {file.FileName}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(retryContext))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Previous attempt context: {retryContext}");
+        }
+
+        return sb.ToString();
     }
 
     private static ExecutionStatus DetermineSuccessFromOutput(string? output)

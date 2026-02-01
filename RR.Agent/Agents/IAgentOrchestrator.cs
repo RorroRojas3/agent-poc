@@ -12,20 +12,24 @@ public interface IAgentOrchestrator
     /// Processes a user request through the complete agent pipeline.
     /// </summary>
     /// <param name="userRequest">The user's natural language request.</param>
+    /// <param name="inputFilePaths">Optional paths to input files that scripts can read/modify.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Final result with all step outputs.</returns>
     Task<OrchestratorResult> ProcessRequestAsync(
         string userRequest,
+        IEnumerable<string>? inputFilePaths = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Processes a request with streaming updates.
     /// </summary>
     /// <param name="userRequest">The user's request.</param>
+    /// <param name="inputFilePaths">Optional paths to input files that scripts can read/modify.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Stream of progress updates.</returns>
     IAsyncEnumerable<OrchestratorUpdate> ProcessRequestStreamingAsync(
         string userRequest,
+        IEnumerable<string>? inputFilePaths = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -62,6 +66,7 @@ public sealed record OrchestratorUpdate(
 /// </summary>
 public enum OrchestratorPhase
 {
+    PreparingFiles,
     Planning,
     PlanPresentation,
     Executing,

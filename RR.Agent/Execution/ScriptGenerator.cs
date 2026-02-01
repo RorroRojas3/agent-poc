@@ -25,6 +25,32 @@ public sealed class ScriptGenerator : IScriptGenerator
         - Print results to stdout for capture
         - If writing files, use clear filenames and print the path
 
+        IMPORTANT - Package Installation:
+        If your script requires non-standard Python packages (anything beyond the standard library),
+        you MUST include package installation at the beginning of your script using subprocess:
+
+        ```python
+        import subprocess
+        import sys
+
+        def install_packages(packages):
+            for package in packages:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", package])
+
+        # Install required packages
+        install_packages(["pandas", "numpy"])  # List all required packages
+
+        # Now import and use the packages
+        import pandas as pd
+        import numpy as np
+        ```
+
+        Common packages that need installation: pandas, numpy, matplotlib, seaborn, requests,
+        beautifulsoup4, openpyxl, xlrd, scikit-learn, pillow, etc.
+
+        Standard library modules (no installation needed): os, sys, json, csv, re, datetime,
+        pathlib, collections, itertools, functools, math, random, etc.
+
         Respond with ONLY the script code wrapped in a code block. For example:
         ```python
         # Your Python code here
@@ -72,6 +98,7 @@ public sealed class ScriptGenerator : IScriptGenerator
     public async Task<ScriptInfo> GenerateScriptAsync(
         PlanStep step,
         IReadOnlyDictionary<int, ExecutionResult> context,
+        IReadOnlyList<InputFile>? inputFiles = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(step);
@@ -84,8 +111,8 @@ public sealed class ScriptGenerator : IScriptGenerator
 
         await EnsureGeneratorAgentExistsAsync(cancellationToken);
 
-        // Build the prompt with context from previous steps
-        var prompt = BuildGenerationPrompt(step, context);
+        // Build the prompt with context from previous steps and input files
+        var prompt = BuildGenerationPrompt(step, context, inputFiles);
 
         // Create a new thread for script generation
         var threadResponse = await _client.Threads.CreateThreadAsync();
@@ -126,7 +153,8 @@ public sealed class ScriptGenerator : IScriptGenerator
 
     private string BuildGenerationPrompt(
         PlanStep step,
-        IReadOnlyDictionary<int, ExecutionResult> context)
+        IReadOnlyDictionary<int, ExecutionResult> context,
+        IReadOnlyList<InputFile>? inputFiles)
     {
         var prompt = new StringBuilder();
 
@@ -138,6 +166,19 @@ public sealed class ScriptGenerator : IScriptGenerator
         if (!string.IsNullOrWhiteSpace(step.ScriptHint))
         {
             prompt.AppendLine($"Hint: {step.ScriptHint}");
+        }
+
+        // Add input files context
+        if (inputFiles is { Count: > 0 })
+        {
+            prompt.AppendLine();
+            prompt.AppendLine("Available input files (these files will be available in the execution environment):");
+            foreach (var file in inputFiles)
+            {
+                prompt.AppendLine($"- {file.FileName}");
+            }
+            prompt.AppendLine();
+            prompt.AppendLine("You can read, modify, or process these files in your script.");
         }
 
         // Add context from dependent steps
