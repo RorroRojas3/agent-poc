@@ -34,15 +34,32 @@ public sealed class PlanningModule : IPlanningModule
                     "type": "CodeExecution|FileRead|FileWrite|Analysis",
                     "expectedOutput": "What output or result is expected",
                     "dependencies": [],
-                    "scriptHint": "Optional hint for the script (language, approach)"
+                    "scriptHint": "Optional hint for the script (language, approach, required packages)"
                 }
             ]
         }
 
-        Guidelines:
+        Step Type Guidelines:
+        - CodeExecution: Use for ALL file processing that requires libraries (PDF, Excel, images, data analysis).
+          This includes: PDF operations (extract pages, merge, split), Excel/CSV processing, image manipulation,
+          data analysis, any file format that requires specialized packages.
+        - FileRead: ONLY for reading plain text files (.txt, .json, .xml, .csv for simple viewing).
+        - FileWrite: ONLY for writing plain text output to a file (NOT binary files like PDF, images, etc.).
+        - Analysis: For reasoning or decision-making steps that don't require code.
+
+        CRITICAL for binary/complex files (PDF, Excel, images, archives):
+        - ALWAYS use CodeExecution type for BOTH reading AND writing - never use FileRead/FileWrite
+        - A single CodeExecution step should handle the complete operation (read input, process, write output)
+        - Do NOT split binary file operations into separate read/write steps
+        - Include required packages in scriptHint (e.g., "Use pypdf for PDF operations", "Use openpyxl for Excel")
+
+        Example for PDF extraction:
+        - CORRECT: One CodeExecution step: "Extract first 5 pages from input PDF and save as output.pdf"
+        - WRONG: Separate steps for "Extract pages" and "Save to file" - this will fail for binary files
+
+        General Guidelines:
         - Break complex tasks into small, testable steps
         - Each step should have a clear, verifiable output
-        - Use CodeExecution for any computation, data processing, or file generation
         - Order steps by dependencies (later steps can depend on earlier ones)
         - Estimate complexity based on number of steps and difficulty
         - Keep the plan focused and minimal - don't add unnecessary steps

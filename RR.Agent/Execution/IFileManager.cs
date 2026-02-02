@@ -58,6 +58,30 @@ public interface IFileManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Downloads a file from agent storage and saves it to the workspace.
+    /// </summary>
+    /// <param name="fileId">The file ID to download.</param>
+    /// <param name="suggestedFilename">Suggested filename (may be modified if exists). If null, will try to get filename from Azure.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The local path where the file was saved, or null if download failed.</returns>
+    Task<string?> DownloadAndSaveFileAsync(
+        string fileId,
+        string? suggestedFilename = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Downloads multiple generated files from agent storage and saves them to the workspace.
+    /// </summary>
+    /// <param name="fileIds">The file IDs to download.</param>
+    /// <param name="excludeFileIds">File IDs to exclude (e.g., input files that were uploaded).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of local paths where files were saved.</returns>
+    Task<IReadOnlyList<string>> DownloadGeneratedFilesAsync(
+        IEnumerable<string> fileIds,
+        IEnumerable<string>? excludeFileIds = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Cleans up temporary files in the workspace.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>

@@ -25,6 +25,17 @@ public sealed class ScriptGenerator : IScriptGenerator
         - Print results to stdout for capture
         - If writing files, use clear filenames and print the path
 
+        IMPORTANT - Finding Input Files:
+        Input files are available in the current working directory. To find them:
+        ```python
+        import os
+        # List all files in current directory
+        for f in os.listdir('.'):
+            print(f)
+        # Files may have their original name or a modified name
+        # Search for the file by partial name match or extension
+        ```
+
         IMPORTANT - Package Installation:
         If your script requires non-standard Python packages (anything beyond the standard library),
         you MUST include package installation at the beginning of your script using subprocess:
@@ -46,10 +57,45 @@ public sealed class ScriptGenerator : IScriptGenerator
         ```
 
         Common packages that need installation: pandas, numpy, matplotlib, seaborn, requests,
-        beautifulsoup4, openpyxl, xlrd, scikit-learn, pillow, etc.
+        beautifulsoup4, openpyxl, xlrd, scikit-learn, pillow, PyPDF2, pypdf, pymupdf (import as fitz),
+        pdf2image, pdfplumber, etc.
+
+        For PDF processing (always use CodeExecution, not FileRead/FileWrite):
+        - pypdf (recommended): For reading/writing PDF, extracting pages, splitting/merging
+        - CRITICAL: Always save output files directly in the script - print the output path when done
+          ```python
+          import os
+          import subprocess
+          import sys
+          subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pypdf"])
+          from pypdf import PdfReader, PdfWriter
+
+          # Find the PDF file dynamically
+          pdf_file = None
+          for f in os.listdir('.'):
+              if f.endswith('.pdf'):
+                  pdf_file = f
+                  break
+          if not pdf_file:
+              raise FileNotFoundError("No PDF file found")
+          print(f"Found PDF: {pdf_file}")
+
+          reader = PdfReader(pdf_file)
+          writer = PdfWriter()
+          pages_to_extract = min(5, len(reader.pages))
+          for i in range(pages_to_extract):
+              writer.add_page(reader.pages[i])
+
+          output_path = "output.pdf"
+          with open(output_path, "wb") as f:
+              writer.write(f)
+          print(f"Successfully saved {pages_to_extract} pages to: {output_path}")
+          ```
+        - pymupdf (fitz): For advanced PDF manipulation, text extraction, rendering
+        - pdfplumber: For extracting tables and text from PDFs
 
         Standard library modules (no installation needed): os, sys, json, csv, re, datetime,
-        pathlib, collections, itertools, functools, math, random, etc.
+        pathlib, collections, itertools, functools, math, random, shutil, etc.
 
         Respond with ONLY the script code wrapped in a code block. For example:
         ```python
@@ -148,7 +194,88 @@ public sealed class ScriptGenerator : IScriptGenerator
             throw new InvalidOperationException("No script generated");
         }
 
-        return ParseScriptResponse(step.Order, response);
+        var script = ParseScriptResponse(step.Order, response);
+
+        // Inject file discovery code for Python scripts with input files
+        if (inputFiles is { Count: > 0 } && script.Language.ToLowerInvariant() is "python" or "py")
+        {
+            script = InjectFileDiscoveryCode(script, inputFiles);
+        }
+
+        return script;
+    }
+
+    private static ScriptInfo InjectFileDiscoveryCode(ScriptInfo script, IReadOnlyList<InputFile> inputFiles)
+    {
+        // Build file patterns from input files
+        var extensions = inputFiles
+            .Select(f => Path.GetExtension(f.FileName).ToLowerInvariant())
+            .Where(ext => !string.IsNullOrEmpty(ext))
+            .Distinct()
+            .ToList();
+
+        var filenames = inputFiles
+            .Select(f => Path.GetFileNameWithoutExtension(f.FileName).ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+        var extensionCheck = extensions.Count > 0
+            ? $"f.lower().endswith(({string.Join(", ", extensions.Select(e => $"'{e}'"))}))"
+            : "False";
+
+        var nameCheck = filenames.Count > 0
+            ? $"any(name in f.lower() for name in [{string.Join(", ", filenames.Select(n => $"'{n}'"))}])"
+            : "False";
+
+        var preamble = $@"# === AUTO-INJECTED FILE DISCOVERY CODE ===
+import os
+
+# List all available files
+print('Available files in current directory:')
+_available_files = os.listdir('.')
+for _f in _available_files:
+    print(f'  - {{_f}}')
+
+# Find input files by extension or name
+_file_mapping = {{}}
+for _input_file in {System.Text.Json.JsonSerializer.Serialize(inputFiles.Select(f => f.FileName).ToList())}:
+    _ext = os.path.splitext(_input_file.lower())[1]
+    _name = os.path.splitext(_input_file.lower())[0]
+
+    # Search for matching file
+    for _f in _available_files:
+        if _f.lower().endswith(_ext) or _name in _f.lower():
+            _file_mapping[_input_file] = _f
+            print(f'Mapped {{_input_file}} -> {{_f}}')
+            break
+
+    if _input_file not in _file_mapping:
+        print(f'Warning: Could not find file matching {{_input_file}}')
+
+# Helper function to get actual filename
+def get_actual_file(original_name):
+    return _file_mapping.get(original_name, original_name)
+
+# === END AUTO-INJECTED CODE ===
+
+";
+        // Now replace common hardcoded filename patterns in the script
+        var modifiedContent = script.Content;
+
+        foreach (var inputFile in inputFiles)
+        {
+            var filename = inputFile.FileName;
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(filename);
+
+            // Replace hardcoded string literals with get_actual_file calls
+            modifiedContent = modifiedContent
+                .Replace($"\"{filename}\"", $"get_actual_file(\"{filename}\")")
+                .Replace($"'{filename}'", $"get_actual_file('{filename}')")
+                .Replace($"\"{nameWithoutExt}.pdf\"", $"get_actual_file(\"{filename}\")")
+                .Replace($"'{nameWithoutExt}.pdf'", $"get_actual_file('{filename}')");
+        }
+
+        return script with { Content = preamble + modifiedContent };
     }
 
     private string BuildGenerationPrompt(
@@ -172,13 +299,30 @@ public sealed class ScriptGenerator : IScriptGenerator
         if (inputFiles is { Count: > 0 })
         {
             prompt.AppendLine();
-            prompt.AppendLine("Available input files (these files will be available in the execution environment):");
+            prompt.AppendLine("IMPORTANT - Input files available:");
             foreach (var file in inputFiles)
             {
                 prompt.AppendLine($"- {file.FileName}");
             }
             prompt.AppendLine();
-            prompt.AppendLine("You can read, modify, or process these files in your script.");
+            prompt.AppendLine("""
+                CRITICAL: Files are attached and available in the current directory, but may have different names.
+                Your script MUST include file discovery at the start:
+
+                import os
+                print("Available files:", os.listdir('.'))
+                # Find the target file by extension or partial name match
+                target_file = None
+                for f in os.listdir('.'):
+                    if f.endswith('.pdf') or 'untitled' in f.lower():  # Adjust pattern as needed
+                        target_file = f
+                        print(f"Found target file: {f}")
+                        break
+                if not target_file:
+                    raise FileNotFoundError("Could not find the input file")
+
+                Always search for files dynamically - never hardcode filenames directly.
+                """);
         }
 
         // Add context from dependent steps

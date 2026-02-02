@@ -169,6 +169,103 @@ public sealed class FileManager : IFileManager
         return content;
     }
 
+    public async Task<string?> DownloadAndSaveFileAsync(
+        string fileId,
+        string? suggestedFilename = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileId);
+
+        try
+        {
+            await EnsureWorkspaceExistsAsync(cancellationToken);
+
+            // Get filename from Azure if not provided
+            var filename = suggestedFilename;
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                try
+                {
+                    var fileInfo = await _client.Files.GetFileAsync(fileId, cancellationToken);
+                    filename = fileInfo.Value.Filename;
+                }
+                catch
+                {
+                    // Fallback to a default name
+                    filename = $"output_{fileId[..8]}.bin";
+                }
+            }
+
+            // Download the file content
+            var content = await DownloadFileAsync(fileId, cancellationToken);
+
+            // Skip empty files
+            if (content.Length == 0)
+            {
+                _logger.LogDebug("Skipping empty file {FileId}", fileId);
+                return null;
+            }
+
+            // Determine the local path
+            var filePath = Path.Combine(_workspacePath, filename);
+
+            // Ensure unique filename if file exists
+            var counter = 1;
+            while (File.Exists(filePath))
+            {
+                var nameWithoutExt = Path.GetFileNameWithoutExtension(filename);
+                var extension = Path.GetExtension(filename);
+                filePath = Path.Combine(_workspacePath, $"{nameWithoutExt}_{counter}{extension}");
+                counter++;
+            }
+
+            // Save to disk
+            await File.WriteAllBytesAsync(filePath, content, cancellationToken);
+
+            _logger.LogInformation(
+                "Downloaded and saved file {FileId} to {FilePath} ({Size} bytes)",
+                fileId,
+                filePath,
+                content.Length);
+
+            return filePath;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to download file {FileId}", fileId);
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> DownloadGeneratedFilesAsync(
+        IEnumerable<string> fileIds,
+        IEnumerable<string>? excludeFileIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var excludeSet = excludeFileIds?.ToHashSet() ?? [];
+        var downloadedPaths = new List<string>();
+
+        foreach (var fileId in fileIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Skip excluded files (e.g., input files, scripts)
+            if (excludeSet.Contains(fileId))
+            {
+                _logger.LogDebug("Skipping excluded file {FileId}", fileId);
+                continue;
+            }
+
+            var localPath = await DownloadAndSaveFileAsync(fileId, null, cancellationToken);
+            if (localPath is not null)
+            {
+                downloadedPaths.Add(localPath);
+            }
+        }
+
+        return downloadedPaths;
+    }
+
     public Task CleanupWorkspaceAsync(CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(_workspacePath))

@@ -116,14 +116,20 @@ async Task RunInteractiveAgentAsync(IServiceProvider services)
 (string Request, List<string> FilePaths) ParseInputWithFiles(string input)
 {
     var filePaths = new List<string>();
-    var parts = new List<string>();
-    var tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    var requestParts = new List<string>();
 
-    for (int i = 0; i < tokens.Length; i++)
+    // Tokenize input handling quoted strings
+    var tokens = TokenizeInput(input);
+
+    for (int i = 0; i < tokens.Count; i++)
     {
-        if (tokens[i].Equals("--file", StringComparison.OrdinalIgnoreCase) && i + 1 < tokens.Length)
+        if (tokens[i].Equals("--file", StringComparison.OrdinalIgnoreCase) && i + 1 < tokens.Count)
         {
             var filePath = tokens[i + 1];
+
+            // Strip surrounding quotes if present
+            filePath = filePath.Trim('"', '\'');
+
             if (File.Exists(filePath))
             {
                 filePaths.Add(filePath);
@@ -138,11 +144,60 @@ async Task RunInteractiveAgentAsync(IServiceProvider services)
         }
         else
         {
-            parts.Add(tokens[i]);
+            requestParts.Add(tokens[i]);
         }
     }
 
-    return (string.Join(" ", parts), filePaths);
+    return (string.Join(" ", requestParts), filePaths);
+}
+
+List<string> TokenizeInput(string input)
+{
+    var tokens = new List<string>();
+    var currentToken = new System.Text.StringBuilder();
+    var inQuotes = false;
+    var quoteChar = '\0';
+
+    for (int i = 0; i < input.Length; i++)
+    {
+        var c = input[i];
+
+        if (!inQuotes && (c == '"' || c == '\''))
+        {
+            // Start of quoted string
+            inQuotes = true;
+            quoteChar = c;
+            currentToken.Append(c);
+        }
+        else if (inQuotes && c == quoteChar)
+        {
+            // End of quoted string
+            inQuotes = false;
+            currentToken.Append(c);
+            quoteChar = '\0';
+        }
+        else if (!inQuotes && c == ' ')
+        {
+            // Space outside quotes - end of token
+            if (currentToken.Length > 0)
+            {
+                tokens.Add(currentToken.ToString());
+                currentToken.Clear();
+            }
+        }
+        else
+        {
+            currentToken.Append(c);
+        }
+    }
+
+    // Add final token if any
+    if (currentToken.Length > 0)
+    {
+        tokens.Add(currentToken.ToString());
+    }
+
+    return tokens;
 }
 
 async Task ProcessRequestWithUpdatesAsync(

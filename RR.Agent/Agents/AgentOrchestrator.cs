@@ -171,7 +171,37 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
 
                 if (evaluation.ShouldProceed)
                 {
-                    // Success - move to next step
+                    // Success - download any generated files
+                    if (result.GeneratedFiles.Count > 0)
+                    {
+                        // Exclude input files and scripts from download
+                        var excludeFileIds = inputFiles
+                            .Where(f => f.IsUploaded)
+                            .Select(f => f.AgentFileId!)
+                            .ToHashSet();
+
+                        // Also exclude scripts if we have the ID
+                        if (result.Script?.AgentFileId is not null)
+                        {
+                            excludeFileIds.Add(result.Script.AgentFileId);
+                        }
+
+                        var downloadedFiles = await _fileManager.DownloadGeneratedFilesAsync(
+                            result.GeneratedFiles,
+                            excludeFileIds,
+                            cancellationToken);
+
+                        if (downloadedFiles.Count > 0)
+                        {
+                            yield return new OrchestratorUpdate(
+                                OrchestratorPhase.Executing,
+                                $"Downloaded {downloadedFiles.Count} output file(s): {string.Join(", ", downloadedFiles.Select(Path.GetFileName))}",
+                                step.Order,
+                                plan.Steps.Count);
+                        }
+                    }
+
+                    // Move to next step
                     stepResults[step.Order] = result;
                     break;
                 }
