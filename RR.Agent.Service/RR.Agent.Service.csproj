@@ -8,6 +8,9 @@
 
   <ItemGroup>
     <Folder Include="Executors\" />
+    <Folder Include="Edges\" />
+    <Folder Include="Events\" />
+    <Folder Include="Workflows\" />
   </ItemGroup>
 
 </Project>
