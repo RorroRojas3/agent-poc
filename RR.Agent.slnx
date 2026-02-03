@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="RR.Agent.Model/RR.Agent.Model.csproj" Id="83750321-2c9b-4972-8554-0737afab4d91" />
+  <Project Path="RR.Agent.Service/RR.Agent.Service.csproj" Id="698c5dcf-4052-484b-ac74-5817901477cb" />
   <Project Path="RR.Agent/RR.Agent.csproj" Id="75f6f7ef-8b7d-4bfb-a2e0-6aad11e0888d" />
 </Solution>

@@ -210,14 +210,14 @@ async Task ProcessRequestWithUpdatesAsync(
     {
         var (color, prefix) = update.Phase switch
         {
-            OrchestratorPhase.PreparingFiles => (ConsoleColor.DarkCyan, "📁 FILES"),
-            OrchestratorPhase.Planning => (ConsoleColor.Blue, "📋 PLANNING"),
-            OrchestratorPhase.PlanPresentation => (ConsoleColor.Magenta, "📝 PLAN"),
-            OrchestratorPhase.Executing => (ConsoleColor.Yellow, "⚙️  EXECUTING"),
-            OrchestratorPhase.Evaluating => (ConsoleColor.Cyan, "🔍 EVALUATING"),
-            OrchestratorPhase.Retrying => (ConsoleColor.DarkYellow, "🔄 RETRYING"),
-            OrchestratorPhase.Completed => (ConsoleColor.Green, "✅ COMPLETED"),
-            OrchestratorPhase.Failed => (ConsoleColor.Red, "❌ FAILED"),
+            OrchestratorPhase.PreparingFiles => (ConsoleColor.DarkCyan, "FILES"),
+            OrchestratorPhase.Planning => (ConsoleColor.Blue, "PLANNING"),
+            OrchestratorPhase.PlanPresentation => (ConsoleColor.Magenta, "PLAN"),
+            OrchestratorPhase.Executing => (ConsoleColor.Yellow, "EXECUTING"),
+            OrchestratorPhase.Evaluating => (ConsoleColor.Cyan, "EVALUATING"),
+            OrchestratorPhase.Retrying => (ConsoleColor.DarkYellow, "RETRYING"),
+            OrchestratorPhase.Completed => (ConsoleColor.Green, "COMPLETED"),
+            OrchestratorPhase.Failed => (ConsoleColor.Red, "FAILED"),
             _ => (ConsoleColor.White, "INFO")
         };
 
