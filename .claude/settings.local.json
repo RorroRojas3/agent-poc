@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(tree:*)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(find:*)",
+      "Bash(dir /b /s \"c:\\\\Users\\\\Rorro\\\\source\\\\repos\\\\agent-poc\\\\RR.Agent.Service\")",
+      "Bash(findstr:*)"
     ]
   }
 }
