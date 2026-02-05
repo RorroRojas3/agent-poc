@@ -30,6 +30,8 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(PythonEnvironmentOptions.SectionName));
         services.Configure<ClaudeOptions>(
             configuration.GetSection(ClaudeOptions.SectionName));
+        services.Configure<OllamaOptions>(
+            configuration.GetSection(OllamaOptions.SectionName));
 
         // Register Python services
         services.AddSingleton<IPythonEnvironmentService, PythonEnvironmentService>();

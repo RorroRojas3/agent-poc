@@ -5,6 +5,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OllamaSharp;
 using RR.Agent.Model.Enums;
 using RR.Agent.Model.Options;
 
@@ -24,6 +25,10 @@ public sealed class AgentService : IDisposable
     private readonly AgentOptions _agentOptions;
     private readonly AnthropicClient _anthropicClient;
     private readonly ClaudeOptions _claudeOptions;
+
+    private readonly OllamaOptions _ollamaOptions;
+
+    private readonly OllamaApiClient _ollamaClient;
     private readonly ILogger<AgentService> _logger;
 
    
@@ -37,23 +42,26 @@ public sealed class AgentService : IDisposable
         IOptions<AzureAIFoundryOptions> options,
         IOptions<AgentOptions> agentOptions,
         IOptions<ClaudeOptions> claudeOptions,
+        IOptions<OllamaOptions> ollamaOptions,
         ILogger<AgentService> logger)
     {
         _options = options.Value;
         _agentOptions = agentOptions.Value;
         _claudeOptions = claudeOptions.Value;
+        _ollamaOptions = ollamaOptions.Value;
+
         _logger = logger;
 
         _client = new PersistentAgentsClient(
             _options.Url,
             new DefaultAzureCredential());
         _anthropicClient = new AnthropicClient() { APIKey = _claudeOptions.ApiKey};
+        _ollamaClient = new OllamaApiClient(_ollamaOptions.Uri);
     }
 
     public async Task<ChatClientAgent> GetOrCreateChatClientAgentAsync(
         AgentsTypes agentsTypes,
         string agentName,
-        string model,
         ChatClientAgentOptions chatClientAgentOptions,
         CancellationToken cancellationToken = default)
     {
@@ -64,7 +72,7 @@ public sealed class AgentService : IDisposable
 
         _logger.LogInformation("Creating chat client agent: {AgentName}", agentName);
 
-        var agent = await GetChatClientAgent(agentsTypes, model, chatClientAgentOptions, cancellationToken);
+        var agent = await GetChatClientAgent(agentsTypes, chatClientAgentOptions, cancellationToken);
 
         _chatClientAgents[agentName] = agent;
 
@@ -332,12 +340,13 @@ public sealed class AgentService : IDisposable
     }
 
     #region Private Methods
-    private async Task<ChatClientAgent> GetChatClientAgent(AgentsTypes agentsTypes, string model, ChatClientAgentOptions chatClientAgentOptions, CancellationToken cancellationToken = default)
+    private async Task<ChatClientAgent> GetChatClientAgent(AgentsTypes agentsTypes, ChatClientAgentOptions chatClientAgentOptions, CancellationToken cancellationToken = default)
     {
         return agentsTypes switch
         {
-            AgentsTypes.Azure_AI_Foundry => await _client.CreateAIAgentAsync(model, chatClientAgentOptions, cancellationToken: cancellationToken),
+            AgentsTypes.Azure_AI_Foundry => await _client.CreateAIAgentAsync(chatClientAgentOptions.ChatOptions!.ModelId!, chatClientAgentOptions, cancellationToken: cancellationToken),
             AgentsTypes.Anthropic => _anthropicClient.AsAIAgent(chatClientAgentOptions),
+            AgentsTypes.Ollama => new ChatClientAgent(_ollamaClient, chatClientAgentOptions),
             _ => throw new InvalidCastException("Unsupported agent type")
         };
     }

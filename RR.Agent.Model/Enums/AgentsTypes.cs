@@ -1,8 +1,16 @@
-﻿namespace RR.Agent.Model.Enums
+﻿using System.ComponentModel;
+
+namespace RR.Agent.Model.Enums
 {
     public enum AgentsTypes
     {
+        [Description("Azure AI Foundry")]
         Azure_AI_Foundry = 1,
-        Anthropic = 2
+
+        [Description("Anthropic")]
+        Anthropic = 2,
+
+        [Description("Ollama")]
+        Ollama = 3,
     }
 }

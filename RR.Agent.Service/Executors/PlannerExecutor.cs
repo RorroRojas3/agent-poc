@@ -53,7 +53,7 @@ public sealed class PlannerExecutor(
                     ModelId = _agentOptions.Planner.ModelId
                 }
             };
-            var agent = await _agentService.GetOrCreateChatClientAgentAsync(_agentOptions.Planner.Type, _agentName, _agentOptions.Planner.ModelId, chatAgentClientOptions, cancellationToken);
+            var agent = await _agentService.GetOrCreateChatClientAgentAsync(_agentOptions.Planner.Type, _agentName, chatAgentClientOptions, cancellationToken);
 
             var sessionId = Guid.NewGuid().ToString();
             var session = await _agentService.CreateSessionAsync(_agentName, sessionId, cancellationToken);
