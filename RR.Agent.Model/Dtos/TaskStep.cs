@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using TaskStatusEnum = RR.Agent.Model.Enums.TaskStatus;
 
 namespace RR.Agent.Model.Dtos;
@@ -10,11 +11,15 @@ public sealed class TaskStep
     /// <summary>
     /// The sequential number of this step within the plan.
     /// </summary>
+    [JsonPropertyName("stepNumber")]
+    [JsonRequired]
     public int StepNumber { get; set; }
 
     /// <summary>
     /// Description of what this step accomplishes.
     /// </summary>
+    [JsonPropertyName("description")]
+    [JsonRequired]
     public required string Description { get; set; }
 
     /// <summary>

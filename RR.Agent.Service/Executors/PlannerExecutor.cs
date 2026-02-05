@@ -1,4 +1,6 @@
-using System.Text.Json;
+using Azure;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RR.Agent.Model.Dtos;
@@ -6,6 +8,10 @@ using RR.Agent.Model.Enums;
 using RR.Agent.Model.Options;
 using RR.Agent.Service.Agents;
 using RR.Agent.Service.Python;
+using System.Text.Json;
+using System.Text.Json.Schema;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace RR.Agent.Service.Executors;
 
@@ -20,6 +26,7 @@ public sealed class PlannerExecutor
     private readonly ILogger<PlannerExecutor> _logger;
 
     private const string AgentName = "Planner";
+    private const string _agentName = "Planner";
 
     public PlannerExecutor(
         AgentService agentService,
@@ -31,6 +38,115 @@ public sealed class PlannerExecutor
         _envService = envService;
         _agentOptions = agentOptions.Value;
         _logger = logger;
+    }
+
+    public async Task<PlannerOutput> ExecuteAsync(PlannerInput input, AgentsTypes agentsTypes = AgentsTypes.Anthropic, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+                RespectNullableAnnotations = true,
+            };
+            var schemaNode = options.GetJsonSchemaAsNode(typeof(TaskPlan));
+            JsonElement schemaElement = JsonSerializer.Deserialize<JsonElement>(schemaNode.ToJsonString());
+
+            var chatAgentClientOptions = new ChatClientAgentOptions
+            {
+                Id = $"{_agentName}-{Guid.NewGuid()}",
+                Name = _agentName,
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = AgentPrompts.PlannerSystemPrompt,
+                    ResponseFormat = new ChatResponseFormatJson(schemaElement),
+                    ModelId = "claude-haiku-4-5"
+                }
+            };
+            var agent = await _agentService.GetOrCreateChatClientAgentAsync(agentsTypes, _agentName, "claude-haiku-4-5", chatAgentClientOptions, cancellationToken);
+
+            var sessionId = Guid.NewGuid().ToString();
+            var session = await _agentService.CreateSessionAsync(_agentName, sessionId, cancellationToken);
+
+            // Build the prompt
+            string prompt;
+            if (input.IsRetry && input.PreviousEvaluation != null)
+            {
+                prompt = AgentPrompts.GetRetryPlannerPrompt(
+                    input.Task,
+                    input.PreviousEvaluation.Reasoning,
+                    input.PreviousEvaluation.RevisedApproach);
+            }
+            else
+            {
+                prompt = $"Create a plan for the following task:\n\n{input.Task}\n\nRespond with raw JSON only. Do not wrap in markdown code blocks.";
+            }
+
+            var response = await _agentService.RunAsync(_agentName, sessionId, prompt, cancellationToken);
+
+            // Clean up response - remove markdown code blocks if present
+            var json = (response ?? string.Empty).Trim();
+            if (json.StartsWith("```json"))
+            {
+                json = json[7..];
+            }
+            else if (json.StartsWith("```"))
+            {
+                json = json[3..];
+            }
+            if (json.EndsWith("```"))
+            {
+                json = json[..^3];
+            }
+            json = json.Trim();
+
+            var plan = JsonSerializer.Deserialize<TaskPlan>(json, options);
+            if (plan == null)
+            {
+                return CreateErrorOutput(input, "Failed to parse plan from agent response");
+            }
+            plan.OriginalTask = input.Task;
+
+            if (plan.Steps.Count == 0)
+            {
+                return CreateErrorOutput(input, "Plan contains no steps");
+            }
+
+            if (plan.Steps.Count > _agentOptions.MaxStepsPerPlan)
+            {
+                _logger.LogWarning("Plan has {Count} steps, truncating to {Max}",
+                    plan.Steps.Count, _agentOptions.MaxStepsPerPlan);
+                plan.Steps = plan.Steps.Take(_agentOptions.MaxStepsPerPlan).ToList();
+            }
+
+            // Create or update execution context
+            var context = input.Context ?? new WorkflowContext
+            {
+                Plan = plan,
+                WorkspacePath = _envService.GetWorkspacePath(),
+                VenvPath = _envService.GetVenvPath()
+            };
+
+            context.Plan = plan;
+            context.CurrentStep = plan.CurrentStep;
+            context.AddMessage(AgentRole.Planner, response);
+
+            plan.Status = Model.Enums.TaskStatus.Planning;
+
+            _logger.LogInformation("Plan created with {StepCount} steps", plan.Steps.Count);
+
+            return new PlannerOutput
+            {
+                Plan = plan,
+                Context = context,
+                Success = true
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during planning");
+            return CreateErrorOutput(input, $"Planning error: {ex.Message}");
+        }
     }
 
     /// <summary>

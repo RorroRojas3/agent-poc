@@ -28,6 +28,8 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(AgentOptions.SectionName));
         services.Configure<PythonEnvironmentOptions>(
             configuration.GetSection(PythonEnvironmentOptions.SectionName));
+        services.Configure<ClaudeOptions>(
+            configuration.GetSection(ClaudeOptions.SectionName));
 
         // Register Python services
         services.AddSingleton<IPythonEnvironmentService, PythonEnvironmentService>();

@@ -1,10 +1,18 @@
+using Anthropic;
 using Azure.AI.Agents.Persistent;
 using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RR.Agent.Model.Enums;
 using RR.Agent.Model.Options;
 
 namespace RR.Agent.Service.Agents;
+
+public interface IAgentService
+{
+}
 
 /// <summary>
 /// Service for managing Azure AI Foundry persistent agents.
@@ -14,23 +22,87 @@ public sealed class AgentService : IDisposable
     private readonly PersistentAgentsClient _client;
     private readonly AzureAIFoundryOptions _options;
     private readonly AgentOptions _agentOptions;
+    private readonly AnthropicClient _anthropicClient;
+    private readonly ClaudeOptions _claudeOptions;
     private readonly ILogger<AgentService> _logger;
 
+   
     private readonly Dictionary<string, PersistentAgent> _agents = [];
     private readonly Dictionary<string, PersistentAgentThread> _threads = [];
+
+    private readonly Dictionary<string, ChatClientAgent> _chatClientAgents = [];
+    private readonly Dictionary<string, AgentSession> _agentSessions = [];
 
     public AgentService(
         IOptions<AzureAIFoundryOptions> options,
         IOptions<AgentOptions> agentOptions,
+        IOptions<ClaudeOptions> claudeOptions,
         ILogger<AgentService> logger)
     {
         _options = options.Value;
         _agentOptions = agentOptions.Value;
+        _claudeOptions = claudeOptions.Value;
         _logger = logger;
 
         _client = new PersistentAgentsClient(
             _options.Url,
             new DefaultAzureCredential());
+        _anthropicClient = new AnthropicClient() { APIKey = _claudeOptions.ApiKey};
+    }
+
+    public async Task<ChatClientAgent> GetOrCreateChatClientAgentAsync(
+        AgentsTypes agentsTypes,
+        string agentName,
+        string model,
+        ChatClientAgentOptions chatClientAgentOptions,
+        CancellationToken cancellationToken = default)
+    {
+        if (_chatClientAgents.TryGetValue(agentName, out var existingAgent))
+        {
+            return existingAgent;
+        }
+
+        _logger.LogInformation("Creating chat client agent: {AgentName}", agentName);
+
+        var agent = await GetChatClientAgent(agentsTypes, model, chatClientAgentOptions, cancellationToken);
+
+        _chatClientAgents[agentName] = agent;
+
+        _logger.LogInformation("Chat client agent created: {AgentName}", agentName);
+
+        return agent;
+    }
+
+    public async Task<AgentSession> CreateSessionAsync(string agentName,
+        string sessionName,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating session: {SessionName}", sessionName);
+
+        var agent = _chatClientAgents[agentName];
+        var agentSession = await agent.GetNewSessionAsync(cancellationToken: cancellationToken);
+
+        _agentSessions[sessionName] = agentSession;
+
+        return agentSession;
+    }
+
+    public async Task<string> RunAsync(
+        string agentName,
+        string sessionName,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = _chatClientAgents[agentName];
+        var agentSession = _agentSessions[sessionName];
+
+        var response = await agent.RunAsync(message, agentSession, cancellationToken: cancellationToken);
+
+        var serializedSession = agentSession.Serialize();
+        var resumedSession = await agent.DeserializeSessionAsync(serializedSession, cancellationToken: cancellationToken);
+        _agentSessions[sessionName] = resumedSession;
+
+        return response.Text;
     }
 
     /// <summary>
@@ -259,6 +331,17 @@ public sealed class AgentService : IDisposable
         // but we should clean up resources if needed
     }
 
+    #region Private Methods
+    private async Task<ChatClientAgent> GetChatClientAgent(AgentsTypes agentsTypes, string model, ChatClientAgentOptions chatClientAgentOptions, CancellationToken cancellationToken = default)
+    {
+        return agentsTypes switch
+        {
+            AgentsTypes.Azure_AI_Foundry => await _client.CreateAIAgentAsync(model, chatClientAgentOptions, cancellationToken: cancellationToken),
+            AgentsTypes.Anthropic => _anthropicClient.AsAIAgent(chatClientAgentOptions),
+            _ => throw new InvalidCastException("Unsupported agent type")
+        };
+    }
+
     private static string TruncateForLog(string message, int maxLength = 200)
     {
         if (message.Length <= maxLength)
@@ -267,4 +350,6 @@ public sealed class AgentService : IDisposable
         }
         return message[..maxLength] + "...";
     }
+
+    #endregion
 }

@@ -67,7 +67,7 @@ public sealed class AgentWorkflow
         // Phase 1: Planning
         RaiseStateChanged("Planning", "Creating execution plan...");
         var plannerInput = new PlannerInput { Task = task };
-        var plannerOutput = await _planner.ExecuteAsync(plannerInput, cancellationToken);
+        var plannerOutput = await _planner.ExecuteAsync(plannerInput, AgentsTypes.Anthropic, cancellationToken);
 
         if (!plannerOutput.Success)
         {
