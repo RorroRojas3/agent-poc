@@ -6,8 +6,11 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
+using OpenAI;
+using OpenAI.Responses;
 using RR.Agent.Model.Enums;
 using RR.Agent.Model.Options;
+using MessageRole = Azure.AI.Agents.Persistent.MessageRole;
 
 namespace RR.Agent.Service.Agents;
 
@@ -25,10 +28,10 @@ public sealed class AgentService : IDisposable
     private readonly AgentOptions _agentOptions;
     private readonly AnthropicClient _anthropicClient;
     private readonly ClaudeOptions _claudeOptions;
-
     private readonly OllamaOptions _ollamaOptions;
-
     private readonly OllamaApiClient _ollamaClient;
+    private readonly OpenAIOptions _openAIOptions;
+    private readonly OpenAIClient _openAIClient;
     private readonly ILogger<AgentService> _logger;
 
    
@@ -43,12 +46,14 @@ public sealed class AgentService : IDisposable
         IOptions<AgentOptions> agentOptions,
         IOptions<ClaudeOptions> claudeOptions,
         IOptions<OllamaOptions> ollamaOptions,
+        IOptions<OpenAIOptions> openAIOptions,
         ILogger<AgentService> logger)
     {
         _options = options.Value;
         _agentOptions = agentOptions.Value;
         _claudeOptions = claudeOptions.Value;
         _ollamaOptions = ollamaOptions.Value;
+        _openAIOptions = openAIOptions.Value;
 
         _logger = logger;
 
@@ -57,6 +62,7 @@ public sealed class AgentService : IDisposable
             new DefaultAzureCredential());
         _anthropicClient = new AnthropicClient() { APIKey = _claudeOptions.ApiKey};
         _ollamaClient = new OllamaApiClient(_ollamaOptions.Uri, _ollamaOptions.Model);
+        _openAIClient = new OpenAIClient(_openAIOptions.ApiKey);
     }
 
     public async Task<ChatClientAgent> GetOrCreateChatClientAgentAsync(
@@ -340,15 +346,31 @@ public sealed class AgentService : IDisposable
     }
 
     #region Private Methods
-    private async Task<ChatClientAgent> GetChatClientAgent(AgentsTypes agentsTypes, ChatClientAgentOptions chatClientAgentOptions, CancellationToken cancellationToken = default)
+    private async Task<ChatClientAgent> GetChatClientAgent(AgentsTypes agentsTypes, ChatClientAgentOptions options, CancellationToken cancellationToken = default)
     {
-        return agentsTypes switch
+        ChatClientAgent chatClientAgent;
+        switch (agentsTypes)
         {
-            AgentsTypes.Azure_AI_Foundry => await _client.CreateAIAgentAsync(chatClientAgentOptions.ChatOptions!.ModelId!, chatClientAgentOptions, cancellationToken: cancellationToken),
-            AgentsTypes.Anthropic => _anthropicClient.AsAIAgent(chatClientAgentOptions),
-            AgentsTypes.Ollama => new ChatClientAgent(_ollamaClient, instructions: chatClientAgentOptions.ChatOptions!.Instructions!, name: chatClientAgentOptions.Name),
-            _ => throw new InvalidCastException("Unsupported agent type")
-        };
+            case AgentsTypes.Azure_AI_Foundry:
+                chatClientAgent = await _client.CreateAIAgentAsync(options.ChatOptions!.ModelId!, options, cancellationToken: cancellationToken);
+                break;
+            case AgentsTypes.Anthropic:
+                chatClientAgent = _anthropicClient.AsAIAgent(options);
+                break;
+            case AgentsTypes.Ollama:
+                chatClientAgent = new ChatClientAgent(_ollamaClient, instructions: options.ChatOptions!.Instructions!, name: options.Name);
+                break;
+            case AgentsTypes.OpenAI:
+                #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates.
+                var responseClient = _openAIClient.GetResponsesClient(options.ChatOptions!.ModelId!);
+                #pragma warning restore OPENAI001
+                chatClientAgent = responseClient.AsAIAgent(instructions: options.ChatOptions!.Instructions!, name: options.Name);
+                break;
+            default:
+                throw new InvalidCastException("Unsupported agent type");
+        }
+        
+        return chatClientAgent;
     }
 
     private static string TruncateForLog(string message, int maxLength = 200)

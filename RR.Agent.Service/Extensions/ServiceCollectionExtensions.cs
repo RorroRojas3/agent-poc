@@ -32,6 +32,8 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(ClaudeOptions.SectionName));
         services.Configure<OllamaOptions>(
             configuration.GetSection(OllamaOptions.SectionName));
+        services.Configure<OpenAIOptions>(
+            configuration.GetSection(OpenAIOptions.SectionName));
 
         // Register Python services
         services.AddSingleton<IPythonEnvironmentService, PythonEnvironmentService>();
