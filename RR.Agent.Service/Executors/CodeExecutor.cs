@@ -12,26 +12,20 @@ namespace RR.Agent.Service.Executors;
 /// <summary>
 /// Executor that uses an AI agent with tools to execute task steps.
 /// </summary>
-public sealed class CodeExecutor
+public sealed class CodeExecutor(
+    AgentService agentService,
+    ToolHandler toolHandler,
+    IOptions<AgentOptions> agentOptions,
+    ILogger<CodeExecutor> logger)
 {
-    private readonly AgentService _agentService;
-    private readonly ToolHandler _toolHandler;
-    private readonly AgentOptions _agentOptions;
-    private readonly ILogger<CodeExecutor> _logger;
+    private readonly AgentService _agentService = agentService;
+    private readonly ToolHandler _toolHandler = toolHandler;
+    private readonly AgentOptions _agentOptions = agentOptions.Value;
+    private readonly ILogger<CodeExecutor> _logger = logger;
 
     private const string AgentName = "Executor";
 
-    public CodeExecutor(
-        AgentService agentService,
-        ToolHandler toolHandler,
-        IOptions<AgentOptions> agentOptions,
-        ILogger<CodeExecutor> logger)
-    {
-        _agentService = agentService;
-        _toolHandler = toolHandler;
-        _agentOptions = agentOptions.Value;
-        _logger = logger;
-    }
+    private const string _agentName = "Executor";
 
     /// <summary>
     /// Executes a task step using the AI agent with tools.
