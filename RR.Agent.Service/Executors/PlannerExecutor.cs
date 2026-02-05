@@ -1,4 +1,3 @@
-using Azure;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -10,7 +9,6 @@ using RR.Agent.Service.Agents;
 using RR.Agent.Service.Python;
 using System.Text.Json;
 using System.Text.Json.Schema;
-using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
 namespace RR.Agent.Service.Executors;

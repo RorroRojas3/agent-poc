@@ -56,7 +56,7 @@ public sealed class AgentService : IDisposable
             _options.Url,
             new DefaultAzureCredential());
         _anthropicClient = new AnthropicClient() { APIKey = _claudeOptions.ApiKey};
-        _ollamaClient = new OllamaApiClient(_ollamaOptions.Uri);
+        _ollamaClient = new OllamaApiClient(_ollamaOptions.Uri, _ollamaOptions.Model);
     }
 
     public async Task<ChatClientAgent> GetOrCreateChatClientAgentAsync(
@@ -346,7 +346,7 @@ public sealed class AgentService : IDisposable
         {
             AgentsTypes.Azure_AI_Foundry => await _client.CreateAIAgentAsync(chatClientAgentOptions.ChatOptions!.ModelId!, chatClientAgentOptions, cancellationToken: cancellationToken),
             AgentsTypes.Anthropic => _anthropicClient.AsAIAgent(chatClientAgentOptions),
-            AgentsTypes.Ollama => new ChatClientAgent(_ollamaClient, chatClientAgentOptions),
+            AgentsTypes.Ollama => new ChatClientAgent(_ollamaClient, instructions: chatClientAgentOptions.ChatOptions!.Instructions!, name: chatClientAgentOptions.Name),
             _ => throw new InvalidCastException("Unsupported agent type")
         };
     }
