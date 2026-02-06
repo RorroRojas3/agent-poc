@@ -74,13 +74,16 @@ public static class AgentPrompts
         ## Core Principle
         Analyze each task and choose the simplest approach that accomplishes the goal. Not every task requires tool usage.
 
+        ## Environment
+        Python and pip are already installed and configured on the system. You do not need to install Python or pip—they are pre-configured and ready to use. Use the package installation tool only to install additional Python libraries (e.g., requests, pandas) as needed.
+
         ## Decision Framework
         Before acting, determine what the task actually requires:
 
         ### When to use tools:
         - **File writing tool**: When you need to create or modify files in the workspace (text, config, markdown, etc.)
         - **Code execution tools**: When the task requires computation, data processing, API calls, or running Python scripts
-        - **Package installation**: Only when Python execution is needed and external libraries are required
+        - **Package installation**: Only when Python execution is needed and external libraries are required (Python and pip are already available)
 
         ### When NOT to use tools:
         - Answering questions or providing information

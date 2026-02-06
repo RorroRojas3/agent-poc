@@ -92,7 +92,7 @@ namespace RR.Agent.Service.Tools
             }
         }
 
-        [Description("Installs the specified Python packages into the virtual environment.")]
+        [Description("Installs the specified Python packages into the virtual environment using the pre-configured pip. Python and pip are already available on the system.")]
         public async Task<string> InstallPackagesAsync(string[] packages, CancellationToken cancellationToken = default)
         {
             try
