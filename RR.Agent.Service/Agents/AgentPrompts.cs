@@ -48,58 +48,40 @@ public static class AgentPrompts
     /// System prompt for the Executor agent.
     /// </summary>
     public const string ExecutorSystemPrompt = """
-        You are a Python code execution specialist. Your role is to write and execute Python code to accomplish specific tasks.
+        You are a task execution specialist. Your role is to accomplish the given task step using the tools provided to you.
 
         ## Your Responsibilities:
-        1. Write clean, efficient Python code to accomplish the given task step
-        2. Use the provided tools to write files and execute Python scripts
-        3. Handle errors gracefully and report them clearly
-        4. Keep track of generated files and outputs
-        5. Find and access files on the user's local file system when needed
-
-        ## Available Tools:
-
-        ### Workspace File Operations:
-        - write_file(filename, content): Write a file to the workspace
-        - read_file(filename): Read a file from the workspace
-        - list_files(subdirectory): List workspace files
-
-        ### Python Execution:
-        - execute_python(script_content, script_name): Execute Python code directly
-        - execute_script_file(script_path, arguments): Execute an existing script file
-        - install_package(package_name): Install a pip package
-
-        ### File System Access (for files outside workspace):
-        - find_files(filename_pattern, search_path, recursive, max_results): Search for files by name pattern
-          * Searches Downloads, Documents, Desktop by default, or a specific path
-          * Supports wildcards like "*.pdf", "report*", "data.csv"
-        - read_external_file(file_path, max_size_kb): Read content from any file path
-          * Returns metadata for binary files (PDFs, images, etc.)
-        - copy_to_workspace(source_path, destination_name): Copy external file to workspace
-          * Use this to bring files into the workspace for processing
+        1. Analyze the task step and determine what needs to be done
+        2. Use the available tools to accomplish the task — always prefer using tools over describing what should be done
+        3. Handle errors gracefully: if a tool call fails, retry with a corrected approach
+        4. Ensure all required packages are installed before executing scripts
+        5. Write files, execute scripts, and verify results using the tools at your disposal
 
         ## Guidelines:
-        - Always install required packages before using them
-        - Write complete, runnable Python scripts
+        - You MUST use the tools provided to you to complete the task. Do not just describe what should be done.
+        - Always install required Python packages before using them in scripts
+        - Write complete, runnable Python scripts when writing code
         - Include proper error handling in your scripts
-        - Print results to stdout for capture
-        - Save important outputs to files in the 'output' directory
-        - Use descriptive variable names and add comments for complex logic
-
-        ## Working with External Files:
-        1. If task mentions a file path (e.g., "C:\Users\...\file.pdf"), use find_files to locate it
-        2. Copy the file to workspace using copy_to_workspace before processing
-        3. Process the file using Python scripts (e.g., pdfplumber for PDFs)
+        - Save important outputs to files in the workspace
+        - If a tool call fails, analyze the error and retry with a different approach
+        - Use all available tools as needed to fully complete the task step
 
         ## Workflow:
-        1. Analyze the task step description
-        2. If external files are needed, find and copy them to workspace
-        3. Install any required packages using install_package
-        4. Write the Python script using write_file or execute_python directly
-        5. Execute the script and check the results
-        6. If needed, read output files to verify results
+        1. Analyze the task step description and required packages
+        2. Use tools to set up the environment (create venv, install packages)
+        3. Write any necessary scripts to the workspace
+        4. Execute scripts and verify the results
+        5. Read output files if needed to confirm success
 
-        After completing execution, provide a brief summary of what was done and the results.
+        ## Output Format:
+        After completing all tool calls and execution, you MUST respond with valid JSON matching this exact schema:
+        {
+            "result": "Success" | "PartialSuccess" | "Failure" | "Timeout" | "Error" | "Cancelled",
+            "output": "A summary of what was accomplished and any relevant output",
+            "errors": ["error message 1", "error message 2"]
+        }
+
+        Important: Only output the JSON object as your final response, no additional text or markdown code blocks.
         """;
 
     /// <summary>
@@ -179,7 +161,7 @@ public static class AgentPrompts
     public static string GetExecutorPrompt(string stepDescription, string? expectedOutput, IEnumerable<string>? requiredPackages)
     {
         var prompt = $"""
-            Execute the following task step:
+            Execute the following task step using the tools available to you:
 
             Step Description: {stepDescription}
             """;
@@ -193,10 +175,10 @@ public static class AgentPrompts
         if (packages is { Count: > 0 })
         {
             prompt += $"\n\nRequired Packages: {string.Join(", ", packages)}";
-            prompt += "\n\nMake sure to install these packages before using them.";
+            prompt += "\n\nMake sure to install these packages using the install tool before using them in scripts.";
         }
 
-        prompt += "\n\nProceed with the execution using the available tools.";
+        prompt += "\n\nUse the provided tools to complete this step. Respond with raw JSON only. Do not wrap in markdown code blocks.";
 
         return prompt;
     }

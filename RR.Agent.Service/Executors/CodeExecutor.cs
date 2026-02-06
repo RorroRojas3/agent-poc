@@ -32,8 +32,6 @@ public sealed class CodeExecutor(
     private readonly PythonToolService _pythonToolService = pythonToolService;
     private readonly FileToolService _fileToolService = fileToolService;
 
-    private const string AgentName = "Executor";
-
     private const string _agentName = "Executor";
 
     /// <summary>
@@ -71,6 +69,7 @@ public sealed class CodeExecutor(
                     Instructions = AgentPrompts.ExecutorSystemPrompt,
                     ResponseFormat = new ChatResponseFormatJson(schemaElement),
                     ModelId = _agentOptions.Executor.ModelId,
+                    AllowMultipleToolCalls = true,
                     Tools = tools
                 }
             };
