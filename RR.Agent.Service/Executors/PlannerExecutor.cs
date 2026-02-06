@@ -9,6 +9,7 @@ using RR.Agent.Service.Agents;
 using RR.Agent.Service.Python;
 using System.Text.Json;
 using System.Text.Json.Schema;
+using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
 namespace RR.Agent.Service.Executors;
@@ -32,7 +33,10 @@ public sealed class PlannerExecutor(
     {
         try
         {
-            JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(TaskPlan));
+            // Use JsonStringEnumConverter so enums serialize/deserialize as strings (AI returns string values)
+            var schemaOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            schemaOptions.Converters.Add(new JsonStringEnumConverter());
+            JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(TaskPlan), serializerOptions: schemaOptions);
 
             var chatAgentClientOptions = new ChatClientAgentOptions
             {
@@ -67,7 +71,7 @@ public sealed class PlannerExecutor(
 
             var response = await _agentService.RunAsAgentResponseAsync(_agentName, sessionId, prompt, cancellationToken);
 
-            var plan = response.Deserialize<TaskPlan>(JsonSerializerOptions.Web);
+            var plan = response.Deserialize<TaskPlan>(schemaOptions);
             if (plan == null)
             {
                 return CreateErrorOutput(input, "Failed to parse plan from agent response");
