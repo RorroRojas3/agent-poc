@@ -18,20 +18,6 @@ public sealed class WorkflowContext
     /// </summary>
     public TaskStep? CurrentStep { get; set; }
 
-    /// <summary>
-    /// Absolute path to the workspace directory.
-    /// </summary>
-    public string WorkspacePath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Absolute path to the Python virtual environment.
-    /// </summary>
-    public string VenvPath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Shared state dictionary for passing data between executors.
-    /// </summary>
-    public Dictionary<string, object> SharedState { get; set; } = [];
 
     /// <summary>
     /// History of messages exchanged in the agent conversation.
@@ -63,6 +49,8 @@ public sealed class WorkflowContext
     /// </summary>
     public PythonExecutionResult? LastExecutionResult { get; set; }
 
+    public ToolResponseDto? LastToolResponse { get; set; }
+
     /// <summary>
     /// Whether the workflow should continue to the next iteration.
     /// </summary>
@@ -83,22 +71,6 @@ public sealed class WorkflowContext
             Role = role,
             Content = content
         });
-    }
-
-    /// <summary>
-    /// Gets a value from shared state with type conversion.
-    /// </summary>
-    public T? GetState<T>(string key) where T : class
-    {
-        return SharedState.TryGetValue(key, out var value) ? value as T : null;
-    }
-
-    /// <summary>
-    /// Sets a value in shared state.
-    /// </summary>
-    public void SetState(string key, object value)
-    {
-        SharedState[key] = value;
     }
 }
 

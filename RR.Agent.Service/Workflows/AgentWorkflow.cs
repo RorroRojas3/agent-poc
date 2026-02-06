@@ -221,9 +221,6 @@ public sealed class AgentWorkflow
             }
         }
 
-        // Generate final result summary
-        plan.FinalResult = GenerateResultSummary(context);
-
         // Cleanup agents
         await _agentService.CleanupAsync(cancellationToken);
 
@@ -231,39 +228,7 @@ public sealed class AgentWorkflow
 
         return context;
     }
-
-    private string GenerateResultSummary(WorkflowContext context)
-    {
-        var plan = context.Plan;
-        var completedSteps = plan.Steps.Count(s => s.Status == TaskStatuses.Completed);
-
-        var summary = $"Task: {plan.OriginalTask}\n";
-        summary += $"Status: {plan.Status}\n";
-        summary += $"Completed Steps: {completedSteps}/{plan.Steps.Count}\n";
-        summary += $"Total Iterations: {plan.TotalIterations}\n";
-
-        if (context.CreatedFiles.Count > 0)
-        {
-            summary += $"Created Files: {string.Join(", ", context.CreatedFiles)}\n";
-        }
-
-        foreach (var step in plan.Steps)
-        {
-            summary += $"\nStep {step.StepNumber}: {step.Description}\n";
-            summary += $"  Status: {step.Status}\n";
-            if (step.Evaluation != null)
-            {
-                summary += $"  Result: {(step.Evaluation.IsSuccessful ? "Success" : "Failed")}\n";
-                if (!string.IsNullOrEmpty(step.Evaluation.Reasoning))
-                {
-                    summary += $"  Reasoning: {TruncateForLog(step.Evaluation.Reasoning, 100)}\n";
-                }
-            }
-        }
-
-        return summary;
-    }
-
+    
     private void RaiseStateChanged(string state, string message)
     {
         _logger.LogInformation("[{State}] {Message}", state, message);
