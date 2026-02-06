@@ -49,14 +49,7 @@ public sealed class CodeExecutor(
             _logger.LogInformation("Executing step {StepNumber}: {Description}",
                 step.StepNumber, TruncateForLog(step.Description));
 
-            var options = new JsonSerializerOptions
-            {
-                TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
-                RespectNullableAnnotations = true,
-            };
-            var schemaNode = options.GetJsonSchemaAsNode(typeof(ToolResponseDto));
-            JsonElement schemaElement = JsonSerializer.Deserialize<JsonElement>(schemaNode.ToJsonString());
-
+            JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(ToolResponseDto));
             List<AITool> tools = [];
             tools.AddRange(_pythonToolService.GetTools());
             tools.AddRange(_fileToolService.GetTools());
@@ -67,7 +60,10 @@ public sealed class CodeExecutor(
                 ChatOptions = new ChatOptions
                 {
                     Instructions = AgentPrompts.ExecutorSystemPrompt,
-                    ResponseFormat = new ChatResponseFormatJson(schemaElement),
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema(
+                                    schema: schema,
+                                    schemaName: "ExecutorResponse",
+                                    schemaDescription: "Response schema for the Executor agent"),
                     ModelId = _agentOptions.Executor.ModelId,
                     AllowMultipleToolCalls = true,
                     Tools = tools
@@ -84,23 +80,21 @@ public sealed class CodeExecutor(
                 step.ExpectedOutput,
                 step.RequiredPackages.Count > 0 ? step.RequiredPackages : input.Context.Plan.RequiredPackages);
 
-            var response = await _agentService.RunAsync(_agentName, sessionId, prompt, cancellationToken);
-            if (string.IsNullOrEmpty(response))
+            var response = await _agentService.RunAsAgentResponseAsync(_agentName, sessionId, prompt, cancellationToken);
+            if (response == null)
             {
                 return CreateErrorOutput(input, "No response from executor agent");
             }
 
-            var json = CleanResponse(response);
-            var toolResponse = JsonSerializer.Deserialize<ToolResponseDto>(json, options);
+            var toolResponse = response.Deserialize<ToolResponseDto>(JsonSerializerOptions.Web);
             if (toolResponse == null)
             {
-                return CreateErrorOutput(input, "Failed to parse executor response from agent response");
+                return CreateErrorOutput(input, "Failed to parse executor response as JSON");
             }
             if (toolResponse.Result != ExecutionResult.Success)
             {
-                return CreateErrorOutput(input, $"Executor reported failure: {toolResponse.Errors}");
+                return CreateErrorOutput(input, $"Executor reported failure: {string.Join("; ", toolResponse.Errors)}");
             }
-
 
             // Update step with results
             var executionResult = PythonExecutionResult.Success();
@@ -109,7 +103,7 @@ public sealed class CodeExecutor(
 
             // Update context
             input.Context.LastExecutionResult = executionResult;
-            input.Context.AddMessage(AgentRole.Executor, response);
+            input.Context.AddMessage(AgentRole.Executor, toolResponse.Output);
 
 
             _logger.LogInformation("Step {StepNumber} execution completed with result: {Result}",
@@ -155,6 +149,43 @@ public sealed class CodeExecutor(
             Success = false,
             Error = error
         };
+    }
+
+    private static ToolResponseDto? TryParseToolResponse(string response, JsonSerializerOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return null;
+        }
+
+        // Try parsing the cleaned response directly
+        var json = CleanResponse(response);
+        try
+        {
+            return JsonSerializer.Deserialize<ToolResponseDto>(json, options);
+        }
+        catch (JsonException)
+        {
+            // Fall through to extraction attempt
+        }
+
+        // Try to extract a JSON object from within the response text
+        var startIndex = response.IndexOf('{');
+        var endIndex = response.LastIndexOf('}');
+        if (startIndex >= 0 && endIndex > startIndex)
+        {
+            var extracted = response[startIndex..(endIndex + 1)];
+            try
+            {
+                return JsonSerializer.Deserialize<ToolResponseDto>(extracted, options);
+            }
+            catch (JsonException)
+            {
+                // Could not parse
+            }
+        }
+
+        return null;
     }
 
     private static string CleanResponse(string response)

@@ -119,6 +119,24 @@ public sealed class AgentService : IDisposable
         return response.Text;
     }
 
+    public async Task<AgentResponse> RunAsAgentResponseAsync(
+        string agentName,
+        string sessionName,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = _chatClientAgents[agentName];
+        var agentSession = _agentSessions[sessionName];
+
+        var response = await agent.RunAsync(message, agentSession, cancellationToken: cancellationToken);
+
+        var serializedSession = agentSession.Serialize();
+        var resumedSession = await agent.DeserializeSessionAsync(serializedSession, cancellationToken: cancellationToken);
+        _agentSessions[sessionName] = resumedSession;
+
+        return response;
+    }
+
     /// <summary>
     /// Gets or creates an agent with the specified configuration.
     /// </summary>
