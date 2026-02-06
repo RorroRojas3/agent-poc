@@ -1,14 +1,15 @@
 using System.ComponentModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RR.Agent.Model.Options;
 
 namespace RR.Agent.Service.Tools;
 
-public class FileToolService(ILogger<FileToolService> logger, AgentOptions agentOptions)
+public class FileToolService(ILogger<FileToolService> logger, IOptions<AgentOptions> agentOptions)
 {
     private readonly ILogger<FileToolService> _logger = logger;
-    private readonly string _workspacePath = Path.GetFullPath(agentOptions.WorkspaceDirectory);
+    private readonly string _workspacePath = Path.GetFullPath(agentOptions.Value.WorkspaceDirectory);
 
     [Description("Initializes the FileToolService by ensuring the workspace directory exists.")]
     public async Task InitializeAsync(CancellationToken cancellationToken = default)

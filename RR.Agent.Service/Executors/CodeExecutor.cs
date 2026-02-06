@@ -21,12 +21,16 @@ public sealed class CodeExecutor(
     AgentService agentService,
     ToolHandler toolHandler,
     IOptions<AgentOptions> agentOptions,
+    PythonToolService pythonToolService,
+    FileToolService fileToolService,
     ILogger<CodeExecutor> logger)
 {
     private readonly AgentService _agentService = agentService;
     private readonly ToolHandler _toolHandler = toolHandler;
     private readonly AgentOptions _agentOptions = agentOptions.Value;
     private readonly ILogger<CodeExecutor> _logger = logger;
+    private readonly PythonToolService _pythonToolService = pythonToolService;
+    private readonly FileToolService _fileToolService = fileToolService;
 
     private const string AgentName = "Executor";
 
@@ -55,6 +59,9 @@ public sealed class CodeExecutor(
             var schemaNode = options.GetJsonSchemaAsNode(typeof(ToolResponseDto));
             JsonElement schemaElement = JsonSerializer.Deserialize<JsonElement>(schemaNode.ToJsonString());
 
+            List<AITool> tools = [];
+            tools.AddRange(_pythonToolService.GetTools());
+            tools.AddRange(_fileToolService.GetTools());
             var chatAgentClientOptions = new ChatClientAgentOptions
             {
                 Id = $"{_agentName}-{Guid.NewGuid()}",
@@ -63,7 +70,8 @@ public sealed class CodeExecutor(
                 {
                     Instructions = AgentPrompts.ExecutorSystemPrompt,
                     ResponseFormat = new ChatResponseFormatJson(schemaElement),
-                    ModelId = _agentOptions.Executor.ModelId
+                    ModelId = _agentOptions.Executor.ModelId,
+                    Tools = tools
                 }
             };
             var agent = await _agentService.GetOrCreateChatClientAgentAsync(_agentOptions.Executor.Type, _agentName, chatAgentClientOptions, cancellationToken);

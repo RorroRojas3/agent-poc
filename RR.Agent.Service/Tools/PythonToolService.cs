@@ -3,21 +3,22 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RR.Agent.Model.Options;
 
 namespace RR.Agent.Service.Tools
 {
     public class PythonToolService(ILogger<PythonToolService> logger, 
-        PythonEnvironmentOptions options, AgentOptions agentOptions)
+        IOptions<PythonEnvironmentOptions> options, IOptions<AgentOptions> agentOptions)
     {
         private readonly ILogger<PythonToolService> _logger = logger;
-        private readonly PythonEnvironmentOptions _options = options;
-        private readonly AgentOptions _agentOptions = agentOptions;
+        private readonly PythonEnvironmentOptions _options = options.Value;
+        private readonly AgentOptions _agentOptions = agentOptions.Value;
 
-        private readonly string _workspacePath = Path.GetFullPath(agentOptions.WorkspaceDirectory);
-        private readonly string _virtualEnvPath = Path.Combine(agentOptions.WorkspaceDirectory, options.VenvName);
-        private readonly string _scriptsPath = Path.Combine(agentOptions.WorkspaceDirectory, options.ScriptsDirectory);
-        private readonly string _outputPath = Path.Combine(agentOptions.WorkspaceDirectory, options.OutputDirectory);
+        private readonly string _workspacePath = Path.GetFullPath(agentOptions.Value.WorkspaceDirectory);
+        private readonly string _virtualEnvPath = Path.Combine(agentOptions.Value.WorkspaceDirectory, options.Value.VenvName);
+        private readonly string _scriptsPath = Path.Combine(agentOptions.Value.WorkspaceDirectory, options.Value.ScriptsDirectory);
+        private readonly string _outputPath = Path.Combine(agentOptions.Value.WorkspaceDirectory, options.Value.OutputDirectory);
 
         [Description("Gets the path to the Python executable in the virtual environment.")]
         public string GetVirtualEnvironmentPath()
