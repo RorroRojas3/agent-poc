@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RR.Agent.Model.Dtos;
@@ -17,7 +20,7 @@ public sealed class EvaluatorExecutor
     private readonly AgentOptions _agentOptions;
     private readonly ILogger<EvaluatorExecutor> _logger;
 
-    private const string AgentName = "Evaluator";
+    private const string _agentName = "Evaluator";
 
     public EvaluatorExecutor(
         AgentService agentService,
@@ -41,21 +44,27 @@ public sealed class EvaluatorExecutor
         {
             _logger.LogInformation("Evaluating step {StepNumber}", step.StepNumber);
 
-            // Create the evaluator agent (optionally with structured output)
-            var responseFormat = _agentOptions.UseStructuredOutput
-                ? ResponseSchemas.EvaluatorResponseSchema
-                : null;
+            var schemaOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            schemaOptions.Converters.Add(new JsonStringEnumConverter());
+            JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(EvaluationResult), serializerOptions: schemaOptions);
 
-            var agent = await _agentService.GetOrCreateAgentAsync(
-                AgentName,
-                AgentPrompts.EvaluatorSystemPrompt,
-                responseFormat: responseFormat,
-                cancellationToken: cancellationToken);
+            var chatAgentClientOptions = new ChatClientAgentOptions
+            {
+                Id = $"{_agentName}-{Guid.NewGuid()}",
+                Name = _agentName,
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = AgentPrompts.EvaluatorSystemPrompt,
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema(
+                                    schema: schema),
+                    ModelId = _agentOptions.Evaluator.ModelId
+                }
+            };
 
-            // Create a thread for this evaluation
-            var thread = await _agentService.CreateThreadAsync(
-                $"evaluator-step{step.StepNumber}-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                cancellationToken);
+            var agent = await _agentService.GetOrCreateChatClientAgentAsync(_agentOptions.Planner.Type, _agentName, chatAgentClientOptions, cancellationToken);
+
+            var sessionId = Guid.NewGuid().ToString();
+            var session = await _agentService.CreateSessionAsync(_agentName, sessionId, cancellationToken);
 
             // Build the prompt
             var prompt = AgentPrompts.GetEvaluatorPrompt(
@@ -67,40 +76,13 @@ public sealed class EvaluatorExecutor
                 step.AttemptCount,
                 _agentOptions.MaxRetryAttempts);
 
-            // Send message and run agent
-            var run = await _agentService.SendMessageAndRunAsync(
-                thread.Id,
-                agent.Id,
-                prompt,
-                cancellationToken);
-
-            // Wait for completion
-            var completedRun = await _agentService.WaitForRunCompletionAsync(
-                thread.Id,
-                run.Id,
-                cancellationToken: cancellationToken);
-
-            if (completedRun.Status != Azure.AI.Agents.Persistent.RunStatus.Completed)
-            {
-                return CreateErrorOutput(input, $"Agent run failed with status: {completedRun.Status}");
-            }
-
-            // Get the response
-            var response = await _agentService.GetLatestAssistantMessageAsync(
-                thread.Id,
-                cancellationToken);
-
-            if (string.IsNullOrEmpty(response))
+            var response = await _agentService.RunAsAgentResponseAsync(_agentName, sessionId, prompt, cancellationToken);
+            if (response == null)
             {
                 return CreateErrorOutput(input, "No response from evaluator agent");
             }
 
-            // Parse the evaluation
-            var evaluation = ParseEvaluationResponse(response);
-            if (evaluation == null)
-            {
-                return CreateErrorOutput(input, "Failed to parse evaluation from agent response");
-            }
+            var evaluation = response.Deserialize<EvaluationResult>(schemaOptions);
 
             // Apply retry logic based on attempt count
             if (!evaluation.IsSuccessful && step.AttemptCount >= _agentOptions.MaxRetryAttempts)
@@ -116,14 +98,14 @@ public sealed class EvaluatorExecutor
             // Update step with evaluation
             step.Evaluation = evaluation;
             step.Status = evaluation.IsSuccessful
-                ? Model.Enums.TaskStatuses.Completed
+                ? TaskStatuses.Completed
                 : evaluation.IsImpossible
-                    ? Model.Enums.TaskStatuses.Impossible
-                    : Model.Enums.TaskStatuses.Failed;
+                    ? TaskStatuses.Impossible
+                    : TaskStatuses.Failed;
 
             // Update context
             input.Context.LastEvaluation = evaluation;
-            input.Context.AddMessage(AgentRole.Evaluator, response);
+            input.Context.AddMessage(AgentRole.Evaluator, response.Text);
             input.Context.IterationCount++;
 
             // Determine workflow continuation
