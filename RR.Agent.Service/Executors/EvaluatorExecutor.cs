@@ -35,7 +35,7 @@ public sealed class EvaluatorExecutor
     public async Task<EvaluatorOutput> ExecuteAsync(EvaluatorInput input, CancellationToken cancellationToken = default)
     {
         var step = input.Step;
-        step.Status = Model.Enums.TaskStatus.Evaluating;
+        step.Status = TaskStatuses.Evaluating;
 
         try
         {
@@ -116,10 +116,10 @@ public sealed class EvaluatorExecutor
             // Update step with evaluation
             step.Evaluation = evaluation;
             step.Status = evaluation.IsSuccessful
-                ? Model.Enums.TaskStatus.Completed
+                ? Model.Enums.TaskStatuses.Completed
                 : evaluation.IsImpossible
-                    ? Model.Enums.TaskStatus.Impossible
-                    : Model.Enums.TaskStatus.Failed;
+                    ? Model.Enums.TaskStatuses.Impossible
+                    : Model.Enums.TaskStatuses.Failed;
 
             // Update context
             input.Context.LastEvaluation = evaluation;
@@ -145,7 +145,7 @@ public sealed class EvaluatorExecutor
                 else
                 {
                     // All steps completed
-                    plan.Status = Model.Enums.TaskStatus.Completed;
+                    plan.Status = TaskStatuses.Completed;
                     plan.CompletedAt = DateTime.UtcNow;
                     shouldContinue = false;
                     isTaskComplete = true;
@@ -155,7 +155,7 @@ public sealed class EvaluatorExecutor
             else if (evaluation.IsImpossible)
             {
                 // Task is impossible
-                input.Context.Plan.Status = Model.Enums.TaskStatus.Impossible;
+                input.Context.Plan.Status = TaskStatuses.Impossible;
                 shouldContinue = false;
                 isTaskComplete = true;
                 needsReplan = false;
@@ -180,7 +180,7 @@ public sealed class EvaluatorExecutor
             else
             {
                 // Failed but no retry
-                input.Context.Plan.Status = Model.Enums.TaskStatus.Failed;
+                input.Context.Plan.Status = TaskStatuses.Failed;
                 shouldContinue = false;
                 isTaskComplete = true;
                 needsReplan = false;
@@ -193,7 +193,7 @@ public sealed class EvaluatorExecutor
             if (input.Context.IterationCount >= _agentOptions.MaxIterations)
             {
                 _logger.LogWarning("Max iterations ({Max}) reached", _agentOptions.MaxIterations);
-                input.Context.Plan.Status = Model.Enums.TaskStatus.Failed;
+                input.Context.Plan.Status = TaskStatuses.Failed;
                 shouldContinue = false;
                 isTaskComplete = true;
             }

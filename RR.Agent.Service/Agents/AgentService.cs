@@ -358,13 +358,13 @@ public sealed class AgentService : IDisposable
                 chatClientAgent = _anthropicClient.AsAIAgent(options);
                 break;
             case AgentsTypes.Ollama:
-                chatClientAgent = new ChatClientAgent(_ollamaClient, instructions: options.ChatOptions!.Instructions!, name: options.Name);
+                chatClientAgent = new ChatClientAgent(_ollamaClient, instructions: options.ChatOptions!.Instructions!, name: options.Name, tools: options.ChatOptions.Tools);
                 break;
             case AgentsTypes.OpenAI:
                 #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates.
                 var responseClient = _openAIClient.GetResponsesClient(options.ChatOptions!.ModelId!);
                 #pragma warning restore OPENAI001
-                chatClientAgent = responseClient.AsAIAgent(instructions: options.ChatOptions!.Instructions!, name: options.Name);
+                chatClientAgent = responseClient.AsAIAgent(instructions: options.ChatOptions!.Instructions!, name: options.Name, tools: options.ChatOptions.Tools);
                 break;
             default:
                 throw new InvalidCastException("Unsupported agent type");

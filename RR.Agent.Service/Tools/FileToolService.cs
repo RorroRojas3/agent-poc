@@ -1,11 +1,28 @@
 using System.ComponentModel;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using RR.Agent.Model.Options;
 
 namespace RR.Agent.Service.Tools;
 
-public class FileToolService(ILogger<FileToolService> logger)
+public class FileToolService(ILogger<FileToolService> logger, AgentOptions agentOptions)
 {
     private readonly ILogger<FileToolService> _logger = logger;
+    private readonly string _workspacePath = Path.GetFullPath(agentOptions.WorkspaceDirectory);
+
+    [Description("Initializes the FileToolService by ensuring the workspace directory exists.")]
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            Directory.CreateDirectory(_workspacePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error initializing FileToolService: {ErrorMessage}", ex.Message);
+            throw;
+        }
+    }
 
     /// <summary>
     /// Checks whether a file exists at the specified path.
@@ -29,8 +46,8 @@ public class FileToolService(ILogger<FileToolService> logger)
     {
         try
         {
-            await Task.CompletedTask;
-            return File.Exists(path);
+            var combinedPath = Path.Combine(_workspacePath, path);
+            return File.Exists(combinedPath);
         }
         catch (Exception ex)
         {
@@ -61,7 +78,8 @@ public class FileToolService(ILogger<FileToolService> logger)
     {
         try
         {
-            var content = await File.ReadAllTextAsync(path, cancellationToken);
+            var combinedPath = Path.Combine(_workspacePath, path);
+            var content = await File.ReadAllTextAsync(combinedPath, cancellationToken);
             return content;
         }
         catch (Exception ex)
@@ -94,7 +112,8 @@ public class FileToolService(ILogger<FileToolService> logger)
     {
         try
         {
-            await File.WriteAllTextAsync(path, content, cancellationToken);
+            var combinedPath = Path.Combine(_workspacePath, path);
+            await File.WriteAllTextAsync(combinedPath, content, cancellationToken);
             return true;
         }
         catch (Exception ex)
@@ -102,5 +121,13 @@ public class FileToolService(ILogger<FileToolService> logger)
             _logger.LogError("Error writing file {Path}: {ErrorMessage}", path, ex.Message);
             return false;
         }
+    }
+
+    public List<AITool> GetTools()
+    {
+        return [AIFunctionFactory.Create(InitializeAsync),
+                AIFunctionFactory.Create(FileExistsAsync),
+                AIFunctionFactory.Create(ReadFileAsync),
+                AIFunctionFactory.Create(WriteFileAsync)];
     }
 }

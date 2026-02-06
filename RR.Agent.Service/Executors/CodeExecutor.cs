@@ -1,4 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Schema;
+using System.Text.Json.Serialization.Metadata;
 using Azure.AI.Agents.Persistent;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RR.Agent.Model.Dtos;
@@ -42,17 +47,29 @@ public sealed class CodeExecutor(
             _logger.LogInformation("Executing step {StepNumber}: {Description}",
                 step.StepNumber, TruncateForLog(step.Description));
 
-            // Create the executor agent with tools
-            var agent = await _agentService.GetOrCreateAgentAsync(
-                AgentName,
-                AgentPrompts.ExecutorSystemPrompt,
-                tools: ToolDefinitions.GetAllTools().Cast<ToolDefinition>(),
-                cancellationToken: cancellationToken);
+            var options = new JsonSerializerOptions
+            {
+                TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+                RespectNullableAnnotations = true,
+            };
+            var schemaNode = options.GetJsonSchemaAsNode(typeof(ToolResponseDto));
+            JsonElement schemaElement = JsonSerializer.Deserialize<JsonElement>(schemaNode.ToJsonString());
 
-            // Create a thread for this execution
-            var thread = await _agentService.CreateThreadAsync(
-                $"executor-step{step.StepNumber}-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                cancellationToken);
+            var chatAgentClientOptions = new ChatClientAgentOptions
+            {
+                Id = $"{_agentName}-{Guid.NewGuid()}",
+                Name = _agentName,
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = AgentPrompts.ExecutorSystemPrompt,
+                    ResponseFormat = new ChatResponseFormatJson(schemaElement),
+                    ModelId = _agentOptions.Executor.ModelId
+                }
+            };
+            var agent = await _agentService.GetOrCreateChatClientAgentAsync(_agentOptions.Executor.Type, _agentName, chatAgentClientOptions, cancellationToken);
+            
+            var sessionId = Guid.NewGuid().ToString();
+            var session = await _agentService.CreateSessionAsync(_agentName, sessionId, cancellationToken);
 
             // Build the prompt
             var prompt = AgentPrompts.GetExecutorPrompt(
@@ -60,73 +77,33 @@ public sealed class CodeExecutor(
                 step.ExpectedOutput,
                 step.RequiredPackages.Count > 0 ? step.RequiredPackages : input.Context.Plan.RequiredPackages);
 
-            // Send message and run agent
-            var run = await _agentService.SendMessageAndRunAsync(
-                thread.Id,
-                agent.Id,
-                prompt,
-                cancellationToken);
-
-            // Wait for completion, handling tool calls
-            PythonExecutionResult? lastPythonResult = null;
-
-            var completedRun = await _agentService.WaitForRunCompletionAsync(
-                thread.Id,
-                run.Id,
-                async toolCalls =>
-                {
-                    var outputs = new List<ToolOutput>();
-                    foreach (var toolCall in toolCalls)
-                    {
-                        var output = await _toolHandler.HandleToolCallAsync(toolCall, cancellationToken);
-                        outputs.Add(output);
-
-                        // Track Python execution results
-                        if (toolCall is RequiredFunctionToolCall funcCall &&
-                            (funcCall.Name == "execute_python" || funcCall.Name == "execute_script_file"))
-                        {
-                            lastPythonResult = ParsePythonResultFromOutput(output);
-                        }
-                    }
-                    return outputs;
-                },
-                cancellationToken);
-
-            // Get the response
-            var response = await _agentService.GetLatestAssistantMessageAsync(
-                thread.Id,
-                cancellationToken);
-
-            // Determine the execution result
-            PythonExecutionResult executionResult;
-            if (lastPythonResult != null)
+            var response = await _agentService.RunAsync(_agentName, sessionId, prompt, cancellationToken);
+            if (string.IsNullOrEmpty(response))
             {
-                executionResult = lastPythonResult;
+                return CreateErrorOutput(input, "No response from executor agent");
             }
-            else if (completedRun.Status == RunStatus.Completed)
+
+            var json = CleanResponse(response);
+            var toolResponse = JsonSerializer.Deserialize<ToolResponseDto>(json, options);
+            if (toolResponse == null)
             {
-                // No Python execution was done, but agent completed successfully
-                executionResult = PythonExecutionResult.Success(
-                    response ?? "Agent completed without Python execution",
-                    string.Empty,
-                    TimeSpan.Zero);
+                return CreateErrorOutput(input, "Failed to parse executor response from agent response");
             }
-            else
+            if (toolResponse.Result != ExecutionResult.Success)
             {
-                executionResult = PythonExecutionResult.Error(
-                    $"Agent run ended with status: {completedRun.Status}");
+                return CreateErrorOutput(input, $"Executor reported failure: {toolResponse.Errors}");
             }
+
 
             // Update step with results
+            var executionResult = PythonExecutionResult.Success();
             step.ExecutionResult = executionResult;
             step.CompletedAt = DateTime.UtcNow;
 
             // Update context
             input.Context.LastExecutionResult = executionResult;
-            if (!string.IsNullOrEmpty(response))
-            {
-                input.Context.AddMessage(AgentRole.Executor, response);
-            }
+            input.Context.AddMessage(AgentRole.Executor, response);
+
 
             _logger.LogInformation("Step {StepNumber} execution completed with result: {Result}",
                 step.StepNumber, executionResult.Result);
@@ -135,7 +112,7 @@ public sealed class CodeExecutor(
             {
                 Context = input.Context,
                 ExecutionResult = executionResult,
-                Success = executionResult.Result == ExecutionResult.Success
+                Success = true
             };
         }
         catch (Exception ex)
@@ -155,6 +132,46 @@ public sealed class CodeExecutor(
                 Error = ex.Message
             };
         }
+    }
+
+    private static CodeExecutorOutput CreateErrorOutput(CodeExecutorInput input, string error)
+    {
+        var errorResult = PythonExecutionResult.Error(error);
+        input.Step.ExecutionResult = errorResult;
+        input.Step.CompletedAt = DateTime.UtcNow;
+        input.Context.LastExecutionResult = errorResult;
+
+        return new CodeExecutorOutput
+        {
+            Context = input.Context,
+            ExecutionResult = errorResult,
+            Success = false,
+            Error = error
+        };
+    }
+
+    private static string CleanResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return response;
+        }
+
+        var json = response;
+        if (json.StartsWith("```json"))
+        {
+            json = json[7..];
+        }
+        else if (json.StartsWith("```"))
+        {
+            json = json[3..];
+        }
+        if (json.EndsWith("```"))
+        {
+            json = json[..^3];
+        }
+
+        return json.Trim();
     }
 
     private PythonExecutionResult? ParsePythonResultFromOutput(ToolOutput output)

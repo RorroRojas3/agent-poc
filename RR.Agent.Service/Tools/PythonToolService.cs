@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RR.Agent.Model.Options;
 
@@ -38,6 +39,7 @@ namespace RR.Agent.Service.Tools
             return Path.Combine(_virtualEnvPath, "bin", "pip");
         }
 
+        [Description("Creates a Python virtual environment in the workspace.")]
         public async Task<bool> CreateVirtualEnvironmentAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -75,7 +77,10 @@ namespace RR.Agent.Service.Tools
                 await process.WaitForExitAsync(cancellationToken);
 
                 if (process.ExitCode != 0)
-                    throw new Exception($"Failed to create virtual environment (exit code {process.ExitCode}): {errors}");
+                {
+                    _logger.LogError("Failed to create virtual environment. Exit Code: {ExitCode}, Errors: {Errors}", process.ExitCode, errors);
+                    return false;
+                }
 
                 return true;
             }
@@ -87,14 +92,14 @@ namespace RR.Agent.Service.Tools
         }
 
         [Description("Installs the specified Python packages into the virtual environment.")]
-        public async Task<bool> InstallPackagesAsync(string[] packages, CancellationToken cancellationToken = default)
+        public async Task<string> InstallPackagesAsync(string[] packages, CancellationToken cancellationToken = default)
         {
             try
             {
                 if (packages == null || packages.Length == 0)
                 {
                     _logger.LogInformation("No Python packages specified for installation.");
-                    return true;
+                    return "No packages specified";
                 }
 
                 var packageString = string.Join(" ", packages.Select(p => $"\"{p}\""));
@@ -118,14 +123,16 @@ namespace RR.Agent.Service.Tools
                 await process.WaitForExitAsync();
 
                 if (process.ExitCode != 0)
-                    throw new Exception($"Python script failed (exit code {process.ExitCode}): {errors}");
+                {
+                    return $"Error installing packages (exit code {process.ExitCode}): {errors}";
+                }
 
-                return true;
+                return output;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to install Python packages.");
-                return false;
+                return $"Exception installing packages: {ex.Message}";
             }
         }
 
@@ -154,15 +161,24 @@ namespace RR.Agent.Service.Tools
                 await process.WaitForExitAsync();
 
                 if (process.ExitCode != 0)
-                    throw new Exception($"Python script failed (exit code {process.ExitCode}): {errors}");
+                {
+                    return "Error executing script (exit code {process.ExitCode}): {errors}";
+                }
 
                 return output;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute Python script: {Script}", fileName);
-                throw;
+                return $"Exception executing script: {ex.Message}";
             }
+        }
+
+        public List<AITool> GetTools()
+        {
+            return [AIFunctionFactory.Create(CreateVirtualEnvironmentAsync),
+                    AIFunctionFactory.Create(InstallPackagesAsync),
+                    AIFunctionFactory.Create(ExcetueScriptAsync)];
         }
     }
 }

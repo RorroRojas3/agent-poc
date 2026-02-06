@@ -108,7 +108,7 @@ public sealed class PlannerExecutor(
             context.CurrentStep = plan.CurrentStep;
             context.AddMessage(AgentRole.Planner, response);
 
-            plan.Status = Model.Enums.TaskStatus.Planning;
+            plan.Status = Model.Enums.TaskStatuses.Planning;
 
             _logger.LogInformation("Plan created with {StepCount} steps", plan.Steps.Count);
 
@@ -131,7 +131,7 @@ public sealed class PlannerExecutor(
         var plan = new TaskPlan
         {
             OriginalTask = input.Task,
-            Status = Model.Enums.TaskStatus.Failed
+            Status = TaskStatuses.Failed
         };
 
         var context = input.Context ?? new WorkflowContext
