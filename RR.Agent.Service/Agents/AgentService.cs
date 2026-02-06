@@ -1,5 +1,7 @@
 using Anthropic;
+using Azure;
 using Azure.AI.Agents.Persistent;
+using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -7,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
 using OpenAI;
+using OpenAI.Chat;
 using OpenAI.Responses;
 using RR.Agent.Model.Enums;
 using RR.Agent.Model.Options;
@@ -32,6 +35,10 @@ public sealed class AgentService : IDisposable
     private readonly OllamaApiClient _ollamaClient;
     private readonly OpenAIOptions _openAIOptions;
     private readonly OpenAIClient _openAIClient;
+
+    private readonly AzureOpenAIOptions _azureOpenAIOptions;
+
+    private readonly AzureOpenAIClient _azureOpenAIClient;
     private readonly ILogger<AgentService> _logger;
 
    
@@ -47,6 +54,7 @@ public sealed class AgentService : IDisposable
         IOptions<ClaudeOptions> claudeOptions,
         IOptions<OllamaOptions> ollamaOptions,
         IOptions<OpenAIOptions> openAIOptions,
+        IOptions<AzureOpenAIOptions> azureOpenAIOptions,
         ILogger<AgentService> logger)
     {
         _options = options.Value;
@@ -54,6 +62,7 @@ public sealed class AgentService : IDisposable
         _claudeOptions = claudeOptions.Value;
         _ollamaOptions = ollamaOptions.Value;
         _openAIOptions = openAIOptions.Value;
+        _azureOpenAIOptions = azureOpenAIOptions.Value;
 
         _logger = logger;
 
@@ -63,6 +72,9 @@ public sealed class AgentService : IDisposable
         _anthropicClient = new AnthropicClient() { APIKey = _claudeOptions.ApiKey};
         _ollamaClient = new OllamaApiClient(_ollamaOptions.Uri, _ollamaOptions.Model);
         _openAIClient = new OpenAIClient(_openAIOptions.ApiKey);
+        _azureOpenAIClient = new AzureOpenAIClient(
+            _azureOpenAIOptions.Uri,
+            new AzureKeyCredential(_azureOpenAIOptions.Key));
     }
 
     public async Task<ChatClientAgent> GetOrCreateChatClientAgentAsync(
@@ -372,6 +384,9 @@ public sealed class AgentService : IDisposable
             case AgentsTypes.Azure_AI_Foundry:
                 var chatClient = _client.AsIChatClient(options.Name!);
                 chatClientAgent = new ChatClientAgent(chatClient, options);
+                break;
+            case AgentsTypes.Azure_OpenAI:
+                chatClientAgent = _azureOpenAIClient.GetChatClient(options.ChatOptions!.ModelId!).AsAIAgent(options);
                 break;
             case AgentsTypes.Anthropic:
                 chatClientAgent = new ChatClientAgent(_anthropicClient.AsIChatClient(), options);

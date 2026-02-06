@@ -14,6 +14,9 @@ namespace RR.Agent.Model.Enums
         Ollama = 3,
 
         [Description("OpenAI")]
-        OpenAI = 4
+        OpenAI = 4,
+
+        [Description("Azure OpenAI")]
+        Azure_OpenAI = 5
     }
 }

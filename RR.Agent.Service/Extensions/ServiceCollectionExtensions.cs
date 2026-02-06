@@ -34,6 +34,8 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(OllamaOptions.SectionName));
         services.Configure<OpenAIOptions>(
             configuration.GetSection(OpenAIOptions.SectionName));
+        services.Configure<AzureOpenAIOptions>(
+            configuration.GetSection(AzureOpenAIOptions.SectionName));
 
         // Register Python services
         services.AddSingleton<IPythonEnvironmentService, PythonEnvironmentService>();
