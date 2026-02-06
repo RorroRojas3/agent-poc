@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Schema;
+using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Azure.AI.Agents.Persistent;
 using Microsoft.Agents.AI;
@@ -49,7 +50,9 @@ public sealed class CodeExecutor(
             _logger.LogInformation("Executing step {StepNumber}: {Description}",
                 step.StepNumber, TruncateForLog(step.Description));
 
-            JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(ToolResponseDto));
+            var schemaOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            schemaOptions.Converters.Add(new JsonStringEnumConverter());
+            JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(ToolResponseDto), serializerOptions: schemaOptions);
             List<AITool> tools = [];
             tools.AddRange(_pythonToolService.GetTools());
             tools.AddRange(_fileToolService.GetTools());
@@ -61,9 +64,7 @@ public sealed class CodeExecutor(
                 {
                     Instructions = AgentPrompts.ExecutorSystemPrompt,
                     ResponseFormat = ChatResponseFormat.ForJsonSchema(
-                                    schema: schema,
-                                    schemaName: "ExecutorResponse",
-                                    schemaDescription: "Response schema for the Executor agent"),
+                                    schema: schema),
                     ModelId = _agentOptions.Executor.ModelId,
                     AllowMultipleToolCalls = true,
                     Tools = tools
@@ -86,7 +87,7 @@ public sealed class CodeExecutor(
                 return CreateErrorOutput(input, "No response from executor agent");
             }
 
-            var toolResponse = response.Deserialize<ToolResponseDto>(JsonSerializerOptions.Web);
+            var toolResponse = response.Deserialize<ToolResponseDto>(schemaOptions);
             if (toolResponse == null)
             {
                 return CreateErrorOutput(input, "Failed to parse executor response as JSON");
