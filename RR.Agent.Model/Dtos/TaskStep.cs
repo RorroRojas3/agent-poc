@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using RR.Agent.Model.Enums;
 using TaskStatusEnum = RR.Agent.Model.Enums.TaskStatus;
 
 namespace RR.Agent.Model.Dtos;
@@ -35,7 +36,7 @@ public sealed class TaskStep
     /// <summary>
     /// Current status of this step.
     /// </summary>
-    public TaskStatusEnum Status { get; set; } = TaskStatusEnum.Pending;
+    public TaskStatuses Status { get; set; } = TaskStatuses.Pending;
 
     /// <summary>
     /// The result of executing this step's Python code.

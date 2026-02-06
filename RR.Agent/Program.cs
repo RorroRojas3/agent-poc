@@ -2,10 +2,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using RR.Agent.Model.Enums;
 using RR.Agent.Service.Extensions;
 using RR.Agent.Service.Workflows;
-
-using TaskStatus = RR.Agent.Model.Enums.TaskStatus;
 
 // Build the host with configuration and services
 var builder = Host.CreateApplicationBuilder(args);
@@ -131,16 +130,16 @@ try
     {
         var statusSymbol = step.Status switch
         {
-            TaskStatus.Completed => "✓",
-            TaskStatus.Failed => "✗",
-            TaskStatus.Impossible => "⊘",
+            TaskStatuses.Completed => "✓",
+            TaskStatuses.Failed => "✗",
+            TaskStatuses.Impossible => "⊘",
             _ => "○"
         };
 
         var statusColor = step.Status switch
         {
-            TaskStatus.Completed => ConsoleColor.Green,
-            TaskStatus.Failed or TaskStatus.Impossible => ConsoleColor.Red,
+            TaskStatuses.Completed => ConsoleColor.Green,
+            TaskStatuses.Failed or TaskStatuses.Impossible => ConsoleColor.Red,
             _ => ConsoleColor.Gray
         };
 
@@ -165,7 +164,7 @@ try
     // Show final output if available
     if (result.LastExecutionResult != null &&
         !string.IsNullOrEmpty(result.LastExecutionResult.StandardOutput) &&
-        plan.Status == TaskStatus.Completed)
+        plan.Status == TaskStatuses.Completed)
     {
         Console.WriteLine("Final Output:");
         Console.WriteLine(new string('-', 70));
@@ -181,7 +180,7 @@ try
 
     Console.WriteLine(new string('═', 70));
 
-    return plan.Status == TaskStatus.Completed ? 0 : 1;
+    return plan.Status == TaskStatuses.Completed ? 0 : 1;
 }
 catch (OperationCanceledException)
 {

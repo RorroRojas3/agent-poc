@@ -33,7 +33,7 @@ public sealed class CodeExecutor(
     public async Task<CodeExecutorOutput> ExecuteAsync(CodeExecutorInput input, CancellationToken cancellationToken = default)
     {
         var step = input.Step;
-        step.Status = Model.Enums.TaskStatus.Executing;
+        step.Status = TaskStatuses.Executing;
         step.StartedAt = DateTime.UtcNow;
         step.AttemptCount++;
 

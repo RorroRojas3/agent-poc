@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using TaskStatusEnum = RR.Agent.Model.Enums.TaskStatus;
+using RR.Agent.Model.Enums;
 
 namespace RR.Agent.Model.Dtos;
 
@@ -43,7 +43,7 @@ public sealed class TaskPlan
     /// Current status of the overall plan.
     /// </summary>
     [JsonPropertyName("status")]
-    public TaskStatusEnum Status { get; set; } = TaskStatusEnum.Pending;
+    public TaskStatuses Status { get; set; } = TaskStatuses.Pending;
 
     /// <summary>
     /// Timestamp when the plan was created.
@@ -89,14 +89,14 @@ public sealed class TaskPlan
     /// </summary>
     [JsonIgnore]
     public bool IsComplete =>
-        Steps.Count > 0 && Steps.All(s => s.Status == TaskStatusEnum.Completed);
+        Steps.Count > 0 && Steps.All(s => s.Status == TaskStatuses.Completed);
 
     /// <summary>
     /// Gets the number of completed steps.
     /// </summary>
     [JsonIgnore]
     public int CompletedStepsCount =>
-        Steps.Count(s => s.Status == TaskStatusEnum.Completed);
+        Steps.Count(s => s.Status == TaskStatuses.Completed);
 
     /// <summary>
     /// Advances to the next step if available.
