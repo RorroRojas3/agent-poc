@@ -370,10 +370,11 @@ public sealed class AgentService : IDisposable
         switch (agentsTypes)
         {
             case AgentsTypes.Azure_AI_Foundry:
-                chatClientAgent = await _client.CreateAIAgentAsync(options.ChatOptions!.ModelId!, options, cancellationToken: cancellationToken);
+                var chatClient = _client.AsIChatClient(options.Name!);
+                chatClientAgent = new ChatClientAgent(chatClient, options);
                 break;
             case AgentsTypes.Anthropic:
-                chatClientAgent = _anthropicClient.AsAIAgent(options);
+                chatClientAgent = new ChatClientAgent(_anthropicClient.AsIChatClient(), options);
                 break;
             case AgentsTypes.Ollama:
                 chatClientAgent = new ChatClientAgent(_ollamaClient, instructions: options.ChatOptions!.Instructions!, name: options.Name, tools: options.ChatOptions.Tools);
@@ -382,7 +383,7 @@ public sealed class AgentService : IDisposable
                 #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates.
                 var responseClient = _openAIClient.GetResponsesClient(options.ChatOptions!.ModelId!);
                 #pragma warning restore OPENAI001
-                chatClientAgent = responseClient.AsAIAgent(instructions: options.ChatOptions!.Instructions!, name: options.Name, tools: options.ChatOptions.Tools);
+                chatClientAgent = new ChatClientAgent(responseClient.AsIChatClient(), options);
                 break;
             default:
                 throw new InvalidCastException("Unsupported agent type");
