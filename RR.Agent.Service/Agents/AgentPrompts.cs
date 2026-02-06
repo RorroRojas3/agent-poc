@@ -1,3 +1,6 @@
+using System.Text;
+using RR.Agent.Model.Dtos;
+
 namespace RR.Agent.Service.Agents;
 
 /// <summary>
@@ -104,50 +107,61 @@ public static class AgentPrompts
     /// <summary>
     /// System prompt for the Evaluator agent.
     /// </summary>
+    /// <summary>
+/// System prompt for the Evaluator agent.
+/// </summary>
     public const string EvaluatorSystemPrompt = """
-        You are a result evaluation specialist. Your role is to analyze execution results and determine if the task step was successful.
+    You are a result evaluation specialist. Your role is to analyze execution results and determine if the task step was successful.
 
-        ## Your Responsibilities:
-        1. Analyze the execution results (stdout, stderr, exit code)
-        2. Compare results against the expected output for the step
-        3. Identify specific issues if the execution failed
-        4. Suggest corrections or alternative approaches
-        5. Determine if the task is impossible after multiple failures
+    ## Context
+    The executor may complete tasks in different ways:
+    - **Direct response**: A text-only answer without tool usage
+    - **File writing**: Created or modified files in the workspace
+    - **Script execution**: Ran Python scripts with stdout/stderr output
 
-        ## Guidelines:
-        - Be thorough in analyzing errors and their root causes
-        - Consider both functional correctness and output quality
-        - Provide actionable suggestions for improvement
-        - Be conservative in marking tasks as impossible
-        - Consider retry only if there's a reasonable chance of success
+    ## Your Responsibilities
+    1. Analyze the execution result based on what approach was used
+    2. Compare results against the expected output for the step
+    3. Identify specific issues if the execution failed
+    4. Suggest corrections or alternative approaches
+    5. Determine if the task is impossible after multiple failures
 
-        ## Output Format:
-        You MUST respond with valid JSON in the following format:
-        {
-            "isSuccessful": true/false,
-            "isImpossible": true/false,
-            "reasoning": "Detailed explanation of your assessment",
-            "issues": ["issue1", "issue2"],
-            "suggestions": ["suggestion1", "suggestion2"],
-            "shouldRetry": true/false,
-            "revisedApproach": "Alternative approach if shouldRetry is true, null otherwise",
-            "confidenceScore": 0.85
-        }
+    ## Evaluation by Execution Type
 
-        ## When to Mark as Impossible:
-        - Multiple different approaches have failed (3+ attempts)
-        - The task requires capabilities outside Python's reach
-        - External dependencies are unavailable or incompatible
-        - The input data is corrupted or invalid
+    ### For direct responses (no tools used):
+    - Verify the output content meets the step requirements
+    - Check if the information provided is accurate and complete
 
-        ## Confidence Score Guidelines:
-        - 0.9-1.0: Very confident, clear success or failure
-        - 0.7-0.9: Reasonably confident, minor uncertainties
-        - 0.5-0.7: Moderate confidence, some ambiguity
-        - Below 0.5: Low confidence, suggest human review
+    ### For file operations:
+    - Confirm files were written successfully (hasWrittenFile = true)
+    - Verify the file path and name match expectations
+    - Consider the output summary for content validation
 
-        Important: Only output the JSON object, no additional text or explanation.
-        """;
+    ### For script execution:
+    - Analyze stdout, stderr, and exit code
+    - Exit code 0 typically indicates success
+    - Non-empty stderr may indicate warnings or errors
+    - Verify script output matches expected results
+
+    ## Guidelines
+    - Be thorough in analyzing errors and their root causes
+    - Consider both functional correctness and output quality
+    - Provide actionable suggestions for improvement
+    - Be conservative in marking tasks as impossible
+    - Consider retry only if there's a reasonable chance of success
+
+    ## When to Mark as Impossible
+    - Multiple different approaches have failed (3+ attempts)
+    - The task requires capabilities outside available tools
+    - External dependencies are unavailable or incompatible
+    - The input data is corrupted or invalid
+
+    ## Confidence Score Guidelines
+    - 0.9-1.0: Very confident, clear success or failure
+    - 0.7-0.9: Reasonably confident, minor uncertainties
+    - 0.5-0.7: Moderate confidence, some ambiguity
+    - Below 0.5: Low confidence, suggest human review
+    """;
 
     /// <summary>
     /// Gets a prompt for the planner when retrying after failure.
@@ -228,5 +242,56 @@ public static class AgentPrompts
 
             Provide your evaluation as JSON only.
             """;
+    }
+
+    public static string GetEvaluatorPrompt(
+        TaskStep step,
+        ToolResponseDto toolResponse,
+        int maxAttempts)
+    {
+        var promptBuilder = new StringBuilder();
+        promptBuilder.AppendLine("Evaluate the following execution results:");
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine($"Step Description: {step.Description}");
+        promptBuilder.AppendLine($"Expected Output: {step.ExpectedOutput ?? "Not specified"}");
+        promptBuilder.AppendLine($"Attempt: {step.AttemptCount} of {maxAttempts}");
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("## Execution Summary");
+        promptBuilder.AppendLine($"- Result: {toolResponse.Result}");
+        promptBuilder.AppendLine($"- Output: {(string.IsNullOrEmpty(toolResponse.Output) ? "(empty)" : toolResponse.Output)}");
+        promptBuilder.AppendLine();
+
+        if (toolResponse.HasWrittenFile)
+        {
+            promptBuilder.AppendLine("## File Operation");
+            promptBuilder.AppendLine($"- File Written: Yes");
+            promptBuilder.AppendLine($"- File Path: {toolResponse.FilePath ?? "(not specified)"}");
+            promptBuilder.AppendLine($"- Filename: {toolResponse.Filename ?? "(not specified)"}");
+            promptBuilder.AppendLine();
+        }
+
+        if (toolResponse.HasExecutedScript)
+        {
+            promptBuilder.AppendLine("## Script Execution");
+            promptBuilder.AppendLine($"- Exit Code: {toolResponse.ScriptExitCode}");
+            promptBuilder.AppendLine($"- Standard Output: {(string.IsNullOrEmpty(toolResponse.ScriptStandardOutput) ? "(empty)" : toolResponse.ScriptStandardOutput)}");
+            if (!string.IsNullOrEmpty(toolResponse.ScriptStandardInput))
+            {
+                promptBuilder.AppendLine($"- Standard Input: {toolResponse.ScriptStandardInput}");
+            }
+            promptBuilder.AppendLine();
+        }
+
+        if (toolResponse.Errors.Count > 0)
+        {
+            promptBuilder.AppendLine("## Errors");
+            foreach (var error in toolResponse.Errors)
+            {
+                promptBuilder.AppendLine($"- {error}");
+            }
+            promptBuilder.AppendLine();
+        }
+
+        return promptBuilder.ToString();
     }
 }

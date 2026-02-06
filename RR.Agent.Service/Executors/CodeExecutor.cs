@@ -114,6 +114,7 @@ public sealed class CodeExecutor(
             {
                 Context = input.Context,
                 ExecutionResult = executionResult,
+                ToolResponse = toolResponse,
                 Success = true
             };
         }
@@ -122,6 +123,12 @@ public sealed class CodeExecutor(
             _logger.LogError(ex, "Error executing step {StepNumber}", step.StepNumber);
 
             var errorResult = PythonExecutionResult.Error($"Execution error: {ex.Message}");
+            var toolResponse = new ToolResponseDto
+            {
+                Result = ExecutionResult.Failure,
+                Errors = [ex.Message],
+                Output = string.Empty
+            };
             step.ExecutionResult = errorResult;
             step.CompletedAt = DateTime.UtcNow;
             input.Context.LastExecutionResult = errorResult;
@@ -131,6 +138,7 @@ public sealed class CodeExecutor(
                 Context = input.Context,
                 ExecutionResult = errorResult,
                 Success = false,
+                ToolResponse = toolResponse,
                 Error = ex.Message
             };
         }
@@ -142,11 +150,18 @@ public sealed class CodeExecutor(
         input.Step.ExecutionResult = errorResult;
         input.Step.CompletedAt = DateTime.UtcNow;
         input.Context.LastExecutionResult = errorResult;
+        var toolResponse = new ToolResponseDto
+        {
+            Result = ExecutionResult.Failure,
+            Errors = [error],
+            Output = string.Empty
+        };
 
         return new CodeExecutorOutput
         {
             Context = input.Context,
             ExecutionResult = errorResult,
+            ToolResponse = toolResponse,
             Success = false,
             Error = error
         };

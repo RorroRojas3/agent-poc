@@ -140,6 +140,7 @@ public sealed class AgentWorkflow
             {
                 Context = codeOutput.Context,
                 Step = currentStep,
+                ToolResponse = codeOutput.ToolResponse,
                 ExecutionResult = codeOutput.ExecutionResult
             };
             var evalOutput = await _evaluator.ExecuteAsync(evalInput, cancellationToken);

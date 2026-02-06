@@ -68,12 +68,8 @@ public sealed class EvaluatorExecutor
 
             // Build the prompt
             var prompt = AgentPrompts.GetEvaluatorPrompt(
-                step.Description,
-                step.ExpectedOutput,
-                input.ExecutionResult.StandardOutput,
-                input.ExecutionResult.StandardError,
-                input.ExecutionResult.ExitCode,
-                step.AttemptCount,
+                step,
+                input.ToolResponse,
                 _agentOptions.MaxRetryAttempts);
 
             var response = await _agentService.RunAsAgentResponseAsync(_agentName, sessionId, prompt, cancellationToken);
