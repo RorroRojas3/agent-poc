@@ -140,6 +140,7 @@ public sealed class AgentWorkflow
             {
                 Context = codeOutput.Context,
                 Step = currentStep,
+                ToolResponse = codeOutput.ToolResponse,
                 ExecutionResult = codeOutput.ExecutionResult
             };
             var evalOutput = await _evaluator.ExecuteAsync(evalInput, cancellationToken);
@@ -157,11 +158,11 @@ public sealed class AgentWorkflow
             // Check if complete
             if (evalOutput.IsTaskComplete)
             {
-                if (plan.Status == Model.Enums.TaskStatus.Completed)
+                if (plan.Status == TaskStatuses.Completed)
                 {
                     RaiseStateChanged("Completed", "Task completed successfully!");
                 }
-                else if (plan.Status == Model.Enums.TaskStatus.Impossible)
+                else if (plan.Status == TaskStatuses.Impossible)
                 {
                     RaiseStateChanged("Impossible", "Task determined to be impossible");
                 }
@@ -196,7 +197,7 @@ public sealed class AgentWorkflow
                 if (!replanOutput.Success)
                 {
                     _logger.LogError("Replanning failed: {Error}", replanOutput.Error);
-                    plan.Status = Model.Enums.TaskStatus.Failed;
+                    plan.Status = TaskStatuses.Failed;
                     break;
                 }
 
@@ -214,7 +215,7 @@ public sealed class AgentWorkflow
             if (context.IterationCount >= _options.MaxIterations)
             {
                 _logger.LogWarning("Max iterations reached ({Max})", _options.MaxIterations);
-                plan.Status = Model.Enums.TaskStatus.Failed;
+                plan.Status = TaskStatuses.Failed;
                 RaiseStateChanged("Failed", "Max iterations reached");
                 break;
             }
@@ -234,7 +235,7 @@ public sealed class AgentWorkflow
     private string GenerateResultSummary(WorkflowContext context)
     {
         var plan = context.Plan;
-        var completedSteps = plan.Steps.Count(s => s.Status == Model.Enums.TaskStatus.Completed);
+        var completedSteps = plan.Steps.Count(s => s.Status == TaskStatuses.Completed);
 
         var summary = $"Task: {plan.OriginalTask}\n";
         summary += $"Status: {plan.Status}\n";

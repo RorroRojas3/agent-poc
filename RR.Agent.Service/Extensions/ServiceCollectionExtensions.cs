@@ -28,10 +28,20 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(AgentOptions.SectionName));
         services.Configure<PythonEnvironmentOptions>(
             configuration.GetSection(PythonEnvironmentOptions.SectionName));
+        services.Configure<ClaudeOptions>(
+            configuration.GetSection(ClaudeOptions.SectionName));
+        services.Configure<OllamaOptions>(
+            configuration.GetSection(OllamaOptions.SectionName));
+        services.Configure<OpenAIOptions>(
+            configuration.GetSection(OpenAIOptions.SectionName));
+        services.Configure<AzureOpenAIOptions>(
+            configuration.GetSection(AzureOpenAIOptions.SectionName));
 
         // Register Python services
         services.AddSingleton<IPythonEnvironmentService, PythonEnvironmentService>();
         services.AddSingleton<IPythonScriptExecutor, PythonScriptExecutor>();
+        services.AddSingleton<PythonToolService>();
+        services.AddSingleton<FileToolService>();
 
         // Register tools
         services.AddSingleton<ToolHandler>();

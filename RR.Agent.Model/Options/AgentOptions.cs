@@ -1,3 +1,5 @@
+using RR.Agent.Model.Enums;
+
 namespace RR.Agent.Model.Options;
 
 /// <summary>
@@ -48,4 +50,32 @@ public sealed class AgentOptions
     /// Default is false for compatibility.
     /// </summary>
     public bool UseStructuredOutput { get; set; } = false;
+
+    public PlannerAgent Planner { get; set; } = new PlannerAgent();
+
+    public ExecutorAgent Executor { get; set; } = new ExecutorAgent();
+
+    public EvaluatorAgent Evaluator { get; set; } = new EvaluatorAgent();
+}
+
+public class BaseAgentOptions
+{
+    public AgentsTypes Type {get; set;} = AgentsTypes.Azure_AI_Foundry;
+
+    public string ModelId {get; set;} = "gpt-5-chat";
+}
+
+public class PlannerAgent : BaseAgentOptions
+{
+    
+}
+
+public class ExecutorAgent : BaseAgentOptions
+{
+    
+}
+
+public class EvaluatorAgent : BaseAgentOptions
+{
+    
 }

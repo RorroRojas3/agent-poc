@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace RR.Agent.Model.Dtos;
 
 /// <summary>
@@ -8,41 +10,49 @@ public sealed class EvaluationResult
     /// <summary>
     /// Whether the step execution was successful and met the expected outcome.
     /// </summary>
+    [JsonPropertyName("isSuccessful")]
     public bool IsSuccessful { get; set; }
 
     /// <summary>
     /// Whether the task has been determined to be impossible to complete.
     /// </summary>
+    [JsonPropertyName("isImpossible")]
     public bool IsImpossible { get; set; }
 
     /// <summary>
     /// The evaluator's reasoning for the assessment.
     /// </summary>
+    [JsonPropertyName("reasoning")]
     public string Reasoning { get; set; } = string.Empty;
 
     /// <summary>
     /// List of specific issues identified in the execution.
     /// </summary>
+    [JsonPropertyName("issues")]
     public List<string> Issues { get; set; } = [];
 
     /// <summary>
     /// List of suggestions for improving the execution.
     /// </summary>
+    [JsonPropertyName("suggestions")]
     public List<string> Suggestions { get; set; } = [];
 
     /// <summary>
     /// Whether the step should be retried with modifications.
     /// </summary>
+    [JsonPropertyName("shouldRetry")]
     public bool ShouldRetry { get; set; }
 
     /// <summary>
     /// Alternative approach suggested if retry is recommended.
     /// </summary>
+    [JsonPropertyName("revisedApproach")]
     public string? RevisedApproach { get; set; }
 
     /// <summary>
     /// Confidence score for the evaluation (0.0 to 1.0).
     /// </summary>
+    [JsonPropertyName("confidenceScore")]
     public double ConfidenceScore { get; set; }
 
     /// <summary>

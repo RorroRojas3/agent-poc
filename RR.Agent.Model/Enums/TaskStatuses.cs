@@ -3,7 +3,7 @@ namespace RR.Agent.Model.Enums;
 /// <summary>
 /// Represents the current status of a task or task step in the workflow.
 /// </summary>
-public enum TaskStatus
+public enum TaskStatuses
 {
     /// <summary>
     /// Task has been created but not yet started.

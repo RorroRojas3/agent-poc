@@ -60,6 +60,12 @@ public sealed class PythonExecutionResult
         ScriptPath = scriptPath
     };
 
+    public static PythonExecutionResult Success() => new()
+    {
+        Result = ExecutionResult.Success,
+        ExitCode = 0
+    };
+
     /// <summary>
     /// Creates a failed execution result.
     /// </summary>

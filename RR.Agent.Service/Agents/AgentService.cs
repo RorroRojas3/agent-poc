@@ -1,10 +1,25 @@
+using Anthropic;
+using Azure;
 using Azure.AI.Agents.Persistent;
+using Azure.AI.OpenAI;
 using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OllamaSharp;
+using OpenAI;
+using OpenAI.Chat;
+using OpenAI.Responses;
+using RR.Agent.Model.Enums;
 using RR.Agent.Model.Options;
+using MessageRole = Azure.AI.Agents.Persistent.MessageRole;
 
 namespace RR.Agent.Service.Agents;
+
+public interface IAgentService
+{
+}
 
 /// <summary>
 /// Service for managing Azure AI Foundry persistent agents.
@@ -14,23 +29,124 @@ public sealed class AgentService : IDisposable
     private readonly PersistentAgentsClient _client;
     private readonly AzureAIFoundryOptions _options;
     private readonly AgentOptions _agentOptions;
+    private readonly AnthropicClient _anthropicClient;
+    private readonly ClaudeOptions _claudeOptions;
+    private readonly OllamaOptions _ollamaOptions;
+    private readonly OllamaApiClient _ollamaClient;
+    private readonly OpenAIOptions _openAIOptions;
+    private readonly OpenAIClient _openAIClient;
+
+    private readonly AzureOpenAIOptions _azureOpenAIOptions;
+
+    private readonly AzureOpenAIClient _azureOpenAIClient;
     private readonly ILogger<AgentService> _logger;
 
+   
     private readonly Dictionary<string, PersistentAgent> _agents = [];
     private readonly Dictionary<string, PersistentAgentThread> _threads = [];
+
+    private readonly Dictionary<string, ChatClientAgent> _chatClientAgents = [];
+    private readonly Dictionary<string, AgentSession> _agentSessions = [];
 
     public AgentService(
         IOptions<AzureAIFoundryOptions> options,
         IOptions<AgentOptions> agentOptions,
+        IOptions<ClaudeOptions> claudeOptions,
+        IOptions<OllamaOptions> ollamaOptions,
+        IOptions<OpenAIOptions> openAIOptions,
+        IOptions<AzureOpenAIOptions> azureOpenAIOptions,
         ILogger<AgentService> logger)
     {
         _options = options.Value;
         _agentOptions = agentOptions.Value;
+        _claudeOptions = claudeOptions.Value;
+        _ollamaOptions = ollamaOptions.Value;
+        _openAIOptions = openAIOptions.Value;
+        _azureOpenAIOptions = azureOpenAIOptions.Value;
+
         _logger = logger;
 
         _client = new PersistentAgentsClient(
             _options.Url,
             new DefaultAzureCredential());
+        _anthropicClient = new AnthropicClient() { APIKey = _claudeOptions.ApiKey};
+        _ollamaClient = new OllamaApiClient(_ollamaOptions.Uri, _ollamaOptions.Model);
+        _openAIClient = new OpenAIClient(_openAIOptions.ApiKey);
+        _azureOpenAIClient = new AzureOpenAIClient(
+            _azureOpenAIOptions.Uri,
+            new AzureKeyCredential(_azureOpenAIOptions.Key));
+    }
+
+    public async Task<ChatClientAgent> GetOrCreateChatClientAgentAsync(
+        AgentsTypes agentsTypes,
+        string agentName,
+        ChatClientAgentOptions chatClientAgentOptions,
+        CancellationToken cancellationToken = default)
+    {
+        if (_chatClientAgents.TryGetValue(agentName, out var existingAgent))
+        {
+            return existingAgent;
+        }
+
+        _logger.LogInformation("Creating chat client agent: {AgentName}", agentName);
+
+        var agent = await GetChatClientAgent(agentsTypes, chatClientAgentOptions, cancellationToken);
+
+        _chatClientAgents[agentName] = agent;
+
+        _logger.LogInformation("Chat client agent created: {AgentName}", agentName);
+
+        return agent;
+    }
+
+    public async Task<AgentSession> CreateSessionAsync(string agentName,
+        string sessionName,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating session: {SessionName}", sessionName);
+
+        var agent = _chatClientAgents[agentName];
+        var agentSession = await agent.GetNewSessionAsync(cancellationToken: cancellationToken);
+
+        _agentSessions[sessionName] = agentSession;
+
+        return agentSession;
+    }
+
+    public async Task<string> RunAsync(
+        string agentName,
+        string sessionName,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = _chatClientAgents[agentName];
+        var agentSession = _agentSessions[sessionName];
+
+        var response = await agent.RunAsync(message, agentSession, cancellationToken: cancellationToken);
+
+        var serializedSession = agentSession.Serialize();
+        var resumedSession = await agent.DeserializeSessionAsync(serializedSession, cancellationToken: cancellationToken);
+        _agentSessions[sessionName] = resumedSession;
+
+        return response.Text;
+    }
+
+    public async Task<AgentResponse> RunAsAgentResponseAsync(
+        string agentName,
+        string sessionName,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = _chatClientAgents[agentName];
+        var agentSession = _agentSessions[sessionName];
+
+        var response = await agent.RunAsync(message, agentSession, cancellationToken: cancellationToken);
+
+        var serializedSession = agentSession.Serialize();
+        var resumedSession = await agent.DeserializeSessionAsync(serializedSession, cancellationToken: cancellationToken);
+        _agentSessions[sessionName] = resumedSession;
+
+        return response;
     }
 
     /// <summary>
@@ -259,6 +375,38 @@ public sealed class AgentService : IDisposable
         // but we should clean up resources if needed
     }
 
+    #region Private Methods
+    private async Task<ChatClientAgent> GetChatClientAgent(AgentsTypes agentsTypes, ChatClientAgentOptions options, CancellationToken cancellationToken = default)
+    {
+        ChatClientAgent chatClientAgent;
+        switch (agentsTypes)
+        {
+            case AgentsTypes.Azure_AI_Foundry:
+                var chatClient = _client.AsIChatClient(options.Name!);
+                chatClientAgent = new ChatClientAgent(chatClient, options);
+                break;
+            case AgentsTypes.Azure_OpenAI:
+                chatClientAgent = _azureOpenAIClient.GetChatClient(options.ChatOptions!.ModelId!).AsAIAgent(options);
+                break;
+            case AgentsTypes.Anthropic:
+                chatClientAgent = new ChatClientAgent(_anthropicClient.AsIChatClient(), options);
+                break;
+            case AgentsTypes.Ollama:
+                chatClientAgent = new ChatClientAgent(_ollamaClient, instructions: options.ChatOptions!.Instructions!, name: options.Name, tools: options.ChatOptions.Tools);
+                break;
+            case AgentsTypes.OpenAI:
+                #pragma warning disable OPENAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates.
+                var responseClient = _openAIClient.GetResponsesClient(options.ChatOptions!.ModelId!);
+                #pragma warning restore OPENAI001
+                chatClientAgent = new ChatClientAgent(responseClient.AsIChatClient(), options);
+                break;
+            default:
+                throw new InvalidCastException("Unsupported agent type");
+        }
+        
+        return chatClientAgent;
+    }
+
     private static string TruncateForLog(string message, int maxLength = 200)
     {
         if (message.Length <= maxLength)
@@ -267,4 +415,6 @@ public sealed class AgentService : IDisposable
         }
         return message[..maxLength] + "...";
     }
+
+    #endregion
 }

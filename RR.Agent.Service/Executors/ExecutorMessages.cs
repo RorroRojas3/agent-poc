@@ -86,6 +86,11 @@ public sealed class CodeExecutorOutput
     public required PythonExecutionResult ExecutionResult { get; set; }
 
     /// <summary>
+    /// The tool response.
+    /// </summary>
+    public required ToolResponseDto ToolResponse { get; set; }
+
+    /// <summary>
     /// Whether execution was successful.
     /// </summary>
     public bool Success { get; set; }
@@ -115,6 +120,8 @@ public sealed class EvaluatorInput
     /// The execution result to evaluate.
     /// </summary>
     public required PythonExecutionResult ExecutionResult { get; set; }
+
+    public required ToolResponseDto ToolResponse { get; set; }
 }
 
 /// <summary>
