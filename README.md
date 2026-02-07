@@ -2,6 +2,16 @@
 
 A prototype agentic system using .NET 10 and Microsoft Agent Framework that demonstrates autonomous task execution with planning, Python script execution, and iterative problem-solving.
 
+## 📚 Documentation
+
+- **[Complete Documentation](docs/)** - Comprehensive guides and references
+- **[Architecture Guide](docs/architecture.md)** - System design and components
+- **[Configuration Guide](docs/configuration.md)** - Setup and configuration options
+- **[API Reference](docs/api-reference.md)** - Detailed API documentation
+- **[Examples & Use Cases](docs/examples.md)** - Sample tasks and patterns
+- **[Development Guide](docs/development.md)** - Contributing and development
+- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+
 ## Architecture
 
 ```
@@ -20,16 +30,16 @@ A prototype agentic system using .NET 10 and Microsoft Agent Framework that demo
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Features
+## ✨ Features
 
-- **Plan**: AI agent breaks down complex tasks into discrete, executable steps
-- **Execute**: Generates and runs Python scripts with tool calling support
-- **Evaluate**: Assesses results, determines success/retry/replan/impossible
-- **File System Access**: Find, read, and copy files from anywhere on the system
-- **Python Environment**: Automatic venv creation and package management
-- **Retry Logic**: Automatic retries with configurable limits and replanning
+- **🎯 Plan**: AI agent breaks down complex tasks into discrete, executable steps
+- **⚡ Execute**: Generates and runs Python scripts with tool calling support
+- **✅ Evaluate**: Assesses results, determines success/retry/replan/impossible
+- **📁 File System Access**: Find, read, and copy files from anywhere on the system
+- **🐍 Python Environment**: Automatic venv creation and package management
+- **🔄 Retry Logic**: Automatic retries with configurable limits and replanning
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 agent-poc/
@@ -53,58 +63,69 @@ agent-poc/
 │   │   └── ToolHandler.cs       # Tool call implementations
 │   └── Workflows/               # Workflow orchestration
 │       └── AgentWorkflow.cs     # Plan-Execute-Evaluate loop
-└── RR.Agent.Model/              # Shared models and configuration
-    ├── Options/                 # Configuration classes
-    ├── Enums/                   # Status enumerations
-    └── Dtos/                    # Data transfer objects
+├── RR.Agent.Model/              # Shared models and configuration
+│   ├── Options/                 # Configuration classes
+│   ├── Enums/                   # Status enumerations
+│   └── Dtos/                    # Data transfer objects
+└── docs/                        # Documentation
+    ├── architecture.md          # System architecture
+    ├── configuration.md         # Configuration guide
+    ├── api-reference.md         # API documentation
+    ├── examples.md              # Examples and use cases
+    ├── development.md           # Development guide
+    └── troubleshooting.md       # Troubleshooting guide
 ```
 
-## Prerequisites
+## 🚀 Quick Start
+
+### Prerequisites
 
 - .NET 10 SDK
 - Python 3.8+ (for script execution)
 - Azure AI Foundry project with deployed models
 
-## Configuration
+### Installation
 
-### 1. Set Azure AI Foundry URL
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/RorroRojas3/agent-poc.git
+   cd agent-poc
+   ```
 
-```bash
-cd RR.Agent
-dotnet user-secrets set "AzureAIFoundry:Url" "https://your-resource.services.ai.azure.com/api/projects/your-project"
-```
+2. **Restore dependencies**:
+   ```bash
+   dotnet restore
+   ```
 
-### 2. Configure Models (Optional)
+3. **Configure Azure AI Foundry**:
+   ```bash
+   cd RR.Agent
+   dotnet user-secrets set "AzureAIFoundry:Url" "https://your-resource.services.ai.azure.com/api/projects/your-project"
+   ```
 
-In `appsettings.json`:
+4. **Build the application**:
+   ```bash
+   dotnet build
+   ```
 
-```json
-{
-  "AzureAIFoundry": {
-    "DefaultModel": "gpt-4o",
-    "PlannerModel": "gpt-4o",
-    "ExecutorModel": "gpt-4o",
-    "EvaluatorModel": "gpt-4o-mini"
-  }
-}
-```
+5. **Run the application**:
+   ```bash
+   dotnet run --project RR.Agent
+   ```
 
-### 3. Agent Options
+For detailed setup instructions, see the [Configuration Guide](docs/configuration.md).
 
-```json
-{
-  "Agent": {
-    "MaxRetryAttempts": 3,
-    "MaxIterations": 10,
-    "MaxStepsPerPlan": 20,
-    "WorkspaceDirectory": "./workspace",
-    "RunTimeoutSeconds": 300,
-    "UseStructuredOutput": false
-  }
-}
-```
+## ⚙️ Configuration
 
-## Usage
+The application is configured through `appsettings.json` and user secrets. Key configuration options include:
+
+- **Azure AI Foundry**: Connection URL and model selection
+- **Agent Options**: Retry limits, timeouts, workspace location
+- **Python Environment**: Python executable, package management
+
+For detailed configuration options, see the [Configuration Guide](docs/configuration.md).
+
+## 💡 Usage
 
 ### Run with Command Line Argument
 
@@ -122,46 +143,44 @@ Then enter your task at the prompt.
 
 ### Example Tasks
 
-```
+```bash
 # Simple task
-Create a Python script that prints 'Hello World'
+dotnet run --project RR.Agent -- "Create a Python script that prints 'Hello World'"
 
 # Data processing
-Read the CSV file at C:\Users\Rorro\Downloads\data.csv and calculate the average of the 'price' column
+dotnet run --project RR.Agent -- "Read data.csv and calculate the average of the price column"
 
-# PDF extraction
-Extract text from C:\Users\Rorro\Downloads\document.pdf and save it to output.txt
+# File conversion
+dotnet run --project RR.Agent -- "Convert data.csv to JSON format"
 
 # Web scraping
-Fetch the latest news headlines from https://news.ycombinator.com and save them to a JSON file
+dotnet run --project RR.Agent -- "Fetch news headlines from https://news.ycombinator.com and save to JSON"
 ```
 
-## Available Tools
+For more examples and use cases, see the [Examples Guide](docs/examples.md).
+
+## 🛠️ Available Tools
 
 The Executor agent has access to these tools:
 
 ### Workspace Operations
-| Tool | Description |
-|------|-------------|
-| `write_file` | Write content to a file in the workspace |
-| `read_file` | Read a file from the workspace |
-| `list_files` | List files in the workspace |
+- `write_file` - Write content to a file in the workspace
+- `read_file` - Read a file from the workspace
+- `list_files` - List files in the workspace
 
 ### Python Execution
-| Tool | Description |
-|------|-------------|
-| `execute_python` | Execute Python code directly |
-| `execute_script_file` | Execute an existing script file |
-| `install_package` | Install a pip package |
+- `execute_python` - Execute Python code directly
+- `execute_script_file` - Execute an existing script file
+- `install_package` - Install a pip package
 
 ### File System Access
-| Tool | Description |
-|------|-------------|
-| `find_files` | Search for files by pattern (supports wildcards) |
-| `read_external_file` | Read content from any file path |
-| `copy_to_workspace` | Copy external files to the workspace |
+- `find_files` - Search for files by pattern (supports wildcards)
+- `read_external_file` - Read content from any file path
+- `copy_to_workspace` - Copy external files to the workspace
 
-## Workflow States
+For detailed tool documentation, see the [API Reference](docs/api-reference.md).
+
+## 🔄 Workflow States
 
 The workflow progresses through these states:
 
@@ -173,16 +192,22 @@ The workflow progresses through these states:
 6. **Replanning** - Creating revised plan (if needed)
 7. **Completed** / **Failed** / **Impossible** - Final states
 
-## Error Handling
+For detailed workflow information, see the [Architecture Guide](docs/architecture.md).
+
+## 🔧 Error Handling
 
 - **Retry**: Failed steps are retried up to `MaxRetryAttempts` times
 - **Replan**: If the Evaluator suggests a different approach, the Planner creates a new plan
 - **Impossible**: After multiple failures, tasks are marked as impossible
 - **Max Iterations**: Safety limit prevents infinite loops
 
-## Structured Output (Experimental)
+For troubleshooting common issues, see the [Troubleshooting Guide](docs/troubleshooting.md).
 
-Enable JSON schema validation for Planner and Evaluator responses:
+## 🧪 Advanced Features
+
+### Structured Output (Experimental)
+
+Enable JSON schema validation for consistent response formats:
 
 ```json
 {
@@ -192,28 +217,43 @@ Enable JSON schema validation for Planner and Evaluator responses:
 }
 ```
 
-> Note: Requires model support for `response_format` with `json_schema` type.
+> **Note**: Requires model support for `response_format` with `json_schema` type (e.g., `gpt-4o`, `gpt-4o-mini`).
 
-## Dependencies
+For more advanced configuration, see the [Configuration Guide](docs/configuration.md).
+
+## 📦 Dependencies
 
 - `Microsoft.Agents.AI` - Microsoft Agent Framework
 - `Microsoft.Agents.AI.AzureAI.Persistent` - Azure AI Foundry Persistent Agents
 - `Azure.Identity` - Azure authentication
 
-## Development
+## 🤝 Contributing
 
-### Build
+Contributions are welcome! Please see the [Development Guide](docs/development.md) for:
 
-```bash
-dotnet build
-```
+- Coding standards and conventions
+- Project structure and architecture
+- Adding new features and tools
+- Testing and debugging
+- Pull request process
 
-### Run Tests
+## 📖 Documentation
 
-```bash
-dotnet test
-```
+Full documentation is available in the [docs](docs/) directory:
 
-## License
+- **[Architecture](docs/architecture.md)** - System design and components
+- **[Configuration](docs/configuration.md)** - Setup and configuration
+- **[API Reference](docs/api-reference.md)** - Detailed API documentation
+- **[Examples](docs/examples.md)** - Sample tasks and use cases
+- **[Development](docs/development.md)** - Development guidelines
+- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 
-MIT
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [.NET 10](https://dotnet.microsoft.com/)
+- Powered by [Microsoft Agent Framework](https://github.com/microsoft/agents)
+- Uses [Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-services/)
