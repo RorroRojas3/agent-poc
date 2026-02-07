@@ -70,12 +70,6 @@ public sealed class TaskPlan
     public int TotalIterations { get; set; }
 
     /// <summary>
-    /// Final output or result summary from the plan execution.
-    /// </summary>
-    [JsonPropertyName("finalResult")]
-    public string? FinalResult { get; set; }
-
-    /// <summary>
     /// Gets the current step being executed, or null if complete.
     /// </summary>
     [JsonIgnore]

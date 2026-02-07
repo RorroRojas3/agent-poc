@@ -87,15 +87,13 @@ public sealed class PlannerExecutor(
             {
                 _logger.LogWarning("Plan has {Count} steps, truncating to {Max}",
                     plan.Steps.Count, _agentOptions.MaxStepsPerPlan);
-                plan.Steps = plan.Steps.Take(_agentOptions.MaxStepsPerPlan).ToList();
+                plan.Steps = [.. plan.Steps.Take(_agentOptions.MaxStepsPerPlan)];
             }
 
             // Create or update execution context
             var context = input.Context ?? new WorkflowContext
             {
-                Plan = plan,
-                WorkspacePath = _envService.GetWorkspacePath(),
-                VenvPath = _envService.GetVenvPath()
+                Plan = plan
             };
 
             context.Plan = plan;
@@ -120,6 +118,7 @@ public sealed class PlannerExecutor(
         }
     }
 
+    #region Private methods
     private PlannerOutput CreateErrorOutput(PlannerInput input, string error)
     {
         var plan = new TaskPlan
@@ -130,9 +129,7 @@ public sealed class PlannerExecutor(
 
         var context = input.Context ?? new WorkflowContext
         {
-            Plan = plan,
-            WorkspacePath = _envService.GetWorkspacePath(),
-            VenvPath = _envService.GetVenvPath()
+            Plan = plan
         };
 
         return new PlannerOutput
@@ -143,37 +140,5 @@ public sealed class PlannerExecutor(
             Error = error
         };
     }
-
-    private static string TruncateForLog(string message, int maxLength = 200)
-    {
-        if (message.Length <= maxLength)
-        {
-            return message;
-        }
-        return message[..maxLength] + "...";
-    }
-
-    private static string CleanResponse(string response)
-    {
-        if (string.IsNullOrWhiteSpace(response))
-        {
-            return response;
-        }
-
-        var json = response;
-        if (json.StartsWith("```json"))
-        {
-            json = json[7..];
-        }
-        else if (json.StartsWith("```"))
-        {
-            json = json[3..];
-        }
-        if (json.EndsWith("```"))
-        {
-            json = json[..^3];
-        }
-
-        return json.Trim();
-    }
+    #endregion
 }

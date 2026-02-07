@@ -92,7 +92,7 @@ namespace RR.Agent.Service.Tools
             }
         }
 
-        [Description("Installs the specified Python packages into the virtual environment.")]
+        [Description("Installs the specified Python packages into the virtual environment using the pre-configured pip. Python and pip are already available on the system.")]
         public async Task<string> InstallPackagesAsync(string[] packages, CancellationToken cancellationToken = default)
         {
             try
@@ -125,10 +125,10 @@ namespace RR.Agent.Service.Tools
 
                 if (process.ExitCode != 0)
                 {
-                    return $"Error installing packages (exit code {process.ExitCode}): {errors}";
+                    return $"Error installing packages (exit code {process.ExitCode}). Standard Error: {errors}";
                 }
 
-                return output;
+                return $"Packages installed successfully. Standard Out: {output}";
             }
             catch (Exception ex)
             {
@@ -137,12 +137,19 @@ namespace RR.Agent.Service.Tools
             }
         }
 
+        [Description("Gets the directory where generated python scripts should be stored")]
+        public string GetScriptsDirectory() => _options.ScriptsDirectory; 
+
         [Description("Executes a Python script from the scripts directory.")]
-        public async Task<string> ExcetueScriptAsync(string fileName, string arguments = "")
+        public async Task<string> ExcetueScriptAsync(
+            [Description("The name of the Python script file to execute.")] string fileName, 
+            [Description("Arguments to pass to the Python script.")] string arguments = "")
         {
             try
             {
-                var filePath = Path.Combine(_scriptsPath, fileName);
+                var parsedName = Path.GetFileName(fileName);
+                var filePath = Path.Combine(_scriptsPath, parsedName);
+                filePath = Path.GetFullPath(filePath);
                 var psi = new ProcessStartInfo
                 {
                     FileName = GetVirtualEnvironmentPath(),              
@@ -179,6 +186,7 @@ namespace RR.Agent.Service.Tools
         {
             return [AIFunctionFactory.Create(CreateVirtualEnvironmentAsync),
                     AIFunctionFactory.Create(InstallPackagesAsync),
+                    AIFunctionFactory.Create(GetScriptsDirectory),
                     AIFunctionFactory.Create(ExcetueScriptAsync)];
         }
     }
