@@ -40,6 +40,9 @@ namespace RR.Agent.Service.Tools
             return Path.Combine(_virtualEnvPath, "bin", "pip");
         }
 
+        [Description("Gets the path to the scripts directory in the workspace. Where Python scripts should be stored.")]
+        public string GetScriptsDirectory() => _scriptsPath;    
+
         [Description("Creates a Python virtual environment in the workspace.")]
         public async Task<bool> CreateVirtualEnvironmentAsync(CancellationToken cancellationToken = default)
         {
@@ -138,7 +141,9 @@ namespace RR.Agent.Service.Tools
         }
 
         [Description("Executes a Python script from the scripts directory.")]
-        public async Task<string> ExcetueScriptAsync(string fileName, string arguments = "", CancellationToken cancellationToken = default)
+        public async Task<string> ExcetueScriptAsync(
+            [Description("The name of the Python script file to execute. No path information should be included.")] string fileName,
+            [Description("Arguments to pass to the Python script.")] string arguments = "", CancellationToken cancellationToken = default)
         {
             Process? process = null;
             try
@@ -199,7 +204,8 @@ namespace RR.Agent.Service.Tools
         {
             return [AIFunctionFactory.Create(CreateVirtualEnvironmentAsync),
                     AIFunctionFactory.Create(InstallPackagesAsync),
-                    AIFunctionFactory.Create(ExcetueScriptAsync)];
+                    AIFunctionFactory.Create(ExcetueScriptAsync),
+                    AIFunctionFactory.Create(GetScriptsDirectory),];
         }
     }
 }
