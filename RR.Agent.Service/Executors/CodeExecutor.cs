@@ -20,14 +20,12 @@ namespace RR.Agent.Service.Executors;
 /// </summary>
 public sealed class CodeExecutor(
     AgentService agentService,
-    ToolHandler toolHandler,
     IOptions<AgentOptions> agentOptions,
     PythonToolService pythonToolService,
     FileToolService fileToolService,
     ILogger<CodeExecutor> logger)
 {
     private readonly AgentService _agentService = agentService;
-    private readonly ToolHandler _toolHandler = toolHandler;
     private readonly AgentOptions _agentOptions = agentOptions.Value;
     private readonly ILogger<CodeExecutor> _logger = logger;
     private readonly PythonToolService _pythonToolService = pythonToolService;
@@ -165,111 +163,6 @@ public sealed class CodeExecutor(
             Success = false,
             Error = error
         };
-    }
-
-    private static ToolResponseDto? TryParseToolResponse(string response, JsonSerializerOptions options)
-    {
-        if (string.IsNullOrWhiteSpace(response))
-        {
-            return null;
-        }
-
-        // Try parsing the cleaned response directly
-        var json = CleanResponse(response);
-        try
-        {
-            return JsonSerializer.Deserialize<ToolResponseDto>(json, options);
-        }
-        catch (JsonException)
-        {
-            // Fall through to extraction attempt
-        }
-
-        // Try to extract a JSON object from within the response text
-        var startIndex = response.IndexOf('{');
-        var endIndex = response.LastIndexOf('}');
-        if (startIndex >= 0 && endIndex > startIndex)
-        {
-            var extracted = response[startIndex..(endIndex + 1)];
-            try
-            {
-                return JsonSerializer.Deserialize<ToolResponseDto>(extracted, options);
-            }
-            catch (JsonException)
-            {
-                // Could not parse
-            }
-        }
-
-        return null;
-    }
-
-    private static string CleanResponse(string response)
-    {
-        if (string.IsNullOrWhiteSpace(response))
-        {
-            return response;
-        }
-
-        var json = response;
-        if (json.StartsWith("```json"))
-        {
-            json = json[7..];
-        }
-        else if (json.StartsWith("```"))
-        {
-            json = json[3..];
-        }
-        if (json.EndsWith("```"))
-        {
-            json = json[..^3];
-        }
-
-        return json.Trim();
-    }
-
-    private PythonExecutionResult? ParsePythonResultFromOutput(ToolOutput output)
-    {
-        try
-        {
-            // The output content should be JSON from the tool handler
-            var json = output.Output;
-            if (string.IsNullOrEmpty(json))
-            {
-                return null;
-            }
-
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            var success = root.TryGetProperty("success", out var successProp) && successProp.GetBoolean();
-            var exitCode = root.TryGetProperty("exit_code", out var exitProp) ? exitProp.GetInt32() : -1;
-            var stdout = root.TryGetProperty("stdout", out var stdoutProp) ? stdoutProp.GetString() ?? "" : "";
-            var stderr = root.TryGetProperty("stderr", out var stderrProp) ? stderrProp.GetString() ?? "" : "";
-            var scriptPath = root.TryGetProperty("script_path", out var pathProp) ? pathProp.GetString() : null;
-            var execTimeMs = root.TryGetProperty("execution_time_ms", out var timeProp) ? timeProp.GetInt32() : 0;
-
-            var result = success
-                ? PythonExecutionResult.Success(stdout, stderr, TimeSpan.FromMilliseconds(execTimeMs), scriptPath)
-                : PythonExecutionResult.Failure(exitCode, stdout, stderr, TimeSpan.FromMilliseconds(execTimeMs), scriptPath);
-
-            // Parse generated files if present
-            if (root.TryGetProperty("generated_files", out var filesProp) &&
-                filesProp.ValueKind == System.Text.Json.JsonValueKind.Array)
-            {
-                result.GeneratedFiles = filesProp.EnumerateArray()
-                    .Select(f => f.GetString())
-                    .Where(f => !string.IsNullOrEmpty(f))
-                    .Cast<string>()
-                    .ToList();
-            }
-
-            return result;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private static string TruncateForLog(string message, int maxLength = 200)

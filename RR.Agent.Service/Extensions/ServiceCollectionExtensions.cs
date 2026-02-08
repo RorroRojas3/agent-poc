@@ -39,12 +39,8 @@ public static class ServiceCollectionExtensions
 
         // Register Python services
         services.AddSingleton<IPythonEnvironmentService, PythonEnvironmentService>();
-        services.AddSingleton<IPythonScriptExecutor, PythonScriptExecutor>();
         services.AddSingleton<PythonToolService>();
         services.AddSingleton<FileToolService>();
-
-        // Register tools
-        services.AddSingleton<ToolHandler>();
 
         // Register agent service
         services.AddSingleton<AgentService>();

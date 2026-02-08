@@ -138,10 +138,14 @@ namespace RR.Agent.Service.Tools
         }
 
         [Description("Executes a Python script from the scripts directory.")]
-        public async Task<string> ExcetueScriptAsync(string fileName, string arguments = "")
+        public async Task<string> ExcetueScriptAsync(string fileName, string arguments = "", CancellationToken cancellationToken = default)
         {
+            Process? process = null;
             try
             {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(_options.ExecutionTimeoutSeconds));
+
                 var filePath = Path.Combine(_scriptsPath, fileName);
                 var psi = new ProcessStartInfo
                 {
@@ -154,12 +158,12 @@ namespace RR.Agent.Service.Tools
                     CreateNoWindow = true
                 };
 
-                using var process = Process.Start(psi)!;
+                process = Process.Start(psi)!;
                 
                 string output = await process.StandardOutput.ReadToEndAsync();
                 string errors = await process.StandardError.ReadToEndAsync();
-                
-                await process.WaitForExitAsync();
+
+                await process.WaitForExitAsync(cts.Token);
 
                 if (process.ExitCode != 0)
                 {
@@ -168,10 +172,26 @@ namespace RR.Agent.Service.Tools
 
                 return output;
             }
+            catch (OperationCanceledException)
+            {
+                if (process != null && !process.HasExited)
+                {
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                    catch { }
+                }
+                return "Script execution timed out and was cancelled.";
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute Python script: {Script}", fileName);
                 return $"Exception executing script: {ex.Message}";
+            }
+            finally
+            {
+                process?.Dispose();
             }
         }
 
